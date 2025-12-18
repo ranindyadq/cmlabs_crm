@@ -1,0 +1,469 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ====================================================
+// 1. MODEL AUTENTIKASI & PENGGUNA
+// ====================================================
+
+// Model Pengguna Utama
+model User {
+  id           String  @id @default(uuid()) @map("user_id")
+  fullName     String  @map("full_name")
+  email        String  @unique
+  phone        String? // Ditambahkan sesuai Wireframe Hal 40
+  passwordHash String? @map("password_hash")
+  photo        String? @default("uploads/default.png") @map("photo")
+
+  status      Status  @default(ACTIVE)
+  isOauthUser Boolean @default(false) @map("is_oauth_user")
+  googleId    String? @unique @map("google_id")
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  lastLogin DateTime? @map("last_login")
+  deletedAt DateTime? @map("deleted_at") // Untuk fitur Soft Delete (Task Hari 3)
+
+  // Relasi Role
+  roleId String @map("role_id")
+  role   Role   @relation(fields: [roleId], references: [id])
+
+  // Relasi Hierarchy (Reports To - Wireframe Hal 38 & 40)
+  managerId    String? @map("manager_id")
+  manager      User?   @relation("UserHierarchy", fields: [managerId], references: [id])
+  subordinates User[]  @relation("UserHierarchy")
+
+  // Relasi Lainnya
+  passwordResets  PasswordReset[]
+  workInfo        UserWorkInfo?
+  notifications   Notification[]  @relation("UserNotifications")
+  auditLogsActor  AuditLog[]      @relation("Actor")
+  auditLogsTarget AuditLog[]      @relation("Target")
+  notificationPreference NotificationPreference?
+
+  // Relasi CRM (Apa yang dimiliki/dibuat user)
+  leadsOwned        Lead[]            @relation("LeadOwner")
+  followedLeads     Lead[]            @relation("LeadFollowers")
+  notesCreated      Note[]
+  meetingsOrganized Meeting[]
+  meetingAttendees  MeetingAttendee[]
+  callsMade         Call[]
+  emailsSent        Email[]
+
+  @@map("users")
+}
+
+// Model Peran Pengguna
+model Role {
+  id    String @id @default(uuid()) @map("role_id")
+  name  String @unique // cth: "ADMIN", "SALES", "OWNER"
+  users User[]
+
+  @@map("roles")
+}
+
+// Model Info Pekerjaan & Profil Tambahan (Wireframe Hal 40)
+model UserWorkInfo {
+  userId     String    @id @map("user_id")
+  department String?
+  roleTitle  String?   @map("role_title") // Jabatan spesifik, misal "Senior Sales"
+  location   String? // Ditambahkan sesuai Wireframe Hal 40
+  bio        String?   @db.Text // Ditambahkan sesuai Wireframe Hal 40
+  skills     String? // Ditambahkan sesuai Wireframe Hal 40 (Bisa dipisah koma)
+  joinedAt   DateTime? @map("joined_at") // Tanggal bergabung resmi
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_work_info")
+}
+
+// Model Reset Password
+model PasswordReset {
+  id        String   @id @default(uuid()) @map("token_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  used      Boolean  @default(false)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
+}
+
+// ====================================================
+// 2. MODEL INTI CRM (LEAD, KONTAK, PERUSAHAAN)
+// ====================================================
+
+// Model Perusahaan
+model Company {
+  id      String  @id @default(uuid()) @map("company_id")
+  name    String  @unique
+  address String?
+  website String?
+
+  // Relasi
+  contacts Contact[]
+  leads    Lead[]
+
+  @@map("companies")
+}
+
+// Model Kontak (Orang)
+model Contact {
+  id       String  @id @default(uuid()) @map("contact_id")
+  name     String
+  email    String? @unique
+  phone    String?
+  position String?
+
+  // Relasi
+  companyId String?  @map("company_id")
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  leads Lead[]
+  calls Call[]
+
+  @@map("contacts")
+}
+
+// Model Lead (Utama)
+model Lead {
+  id       String  @id @default(uuid()) @map("lead_id")
+  title    String
+  value       Decimal? @default(0)
+  currency String  @default("IDR")
+
+  // Stage sebaiknya enum atau string dengan nilai baku: "Lead In", "Contact Made", "Need Identified", "Proposal Made", "Negotiation"
+  stage String?
+
+  status          LeadStatus @default(ACTIVE)
+  sourceOrigin    String?    @map("source_origin")
+  sourceChannel   String?    @map("source_channel")
+  sourceChannelId String?    @map("source_channel_id")
+  description     String?    @db.Text
+  dueDate         DateTime?  @map("due_date")
+  closedAt        DateTime?  @map("closed_at")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+  deletedAt       DateTime?  @map("deleted_at") // Soft delete leads
+
+  // Relasi FK
+  ownerId   String   @map("owner_id")
+  owner     User     @relation("LeadOwner", fields: [ownerId], references: [id])
+  contactId String?  @map("contact_id")
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  companyId String?  @map("company_id")
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  // Relasi Daftar
+  followers         User[]             @relation("LeadFollowers")
+  labels            LeadLabel[]
+  customFieldValues CustomFieldValue[]
+  notes             Note[]
+  meetings          Meeting[]
+  calls             Call[]
+  emails            Email[]
+  invoices          Invoice[]
+  notifications     Notification[]     @relation("LeadNotifications")
+
+  @@index([stage])
+  @@index([ownerId])
+  @@index([createdAt])
+  @@map("leads")
+}
+
+// Model Label
+model Label {
+  id       String      @id @default(uuid()) @map("label_id")
+  name     String      @unique
+  colorHex String?     @map("color_hex")
+  leads    LeadLabel[]
+
+  @@map("labels")
+}
+
+// Model Pivot Lead <-> Label
+model LeadLabel {
+  leadId  String @map("lead_id")
+  labelId String @map("label_id")
+  lead    Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  label   Label  @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([leadId, labelId])
+  @@map("lead_labels")
+}
+
+// ====================================================
+// 3. MODEL AKTIVITAS (TIMELINE)
+// ====================================================
+
+// Model Catatan
+model Note {
+  id            String   @id @default(uuid()) @map("note_id")
+  title         String?
+  content       String   @db.Text
+  attachmentUrl String?  @map("attachment_url")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  leadId String @map("lead_id")
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("notes")
+}
+
+// Model Rapat
+model Meeting {
+  id                    String   @id @default(uuid()) @map("meeting_id")
+  title                 String
+  description           String?  @db.Text
+  startTime             DateTime @map("start_time")
+  endTime               DateTime @map("end_time")
+  location              String?
+  meetingLink           String?  @map("meeting_link")
+  outcome               String?  @db.Text
+  reminderMinutesBefore Int?     @map("reminder_minutes_before")
+  reminderSent          Boolean  @default(false) @map("reminder_sent")
+
+  leadId      String @map("lead_id")
+  lead        Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  organizerId String @map("organizer_id")
+  organizer   User   @relation(fields: [organizerId], references: [id])
+
+  attendees MeetingAttendee[]
+
+  @@map("meetings")
+}
+
+// Model Pivot Rapat <-> Peserta
+model MeetingAttendee {
+  meetingId String  @map("meeting_id")
+  userId    String  @map("user_id")
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([meetingId, userId])
+  @@map("meeting_attendees")
+}
+
+// Model Panggilan
+model Call {
+  id                    String         @id @default(uuid()) @map("call_id")
+  title                 String?
+  callTime              DateTime       @default(now()) @map("call_time")
+  status                CallStatus?    @default(SCHEDULED)
+  durationMinutes       Int?           @map("duration_minutes")
+  direction             CallDirection?
+  result                String?
+  notes                 String?        @db.Text
+  reminderMinutesBefore Int?           @map("reminder_minutes_before")
+  reminderSent          Boolean        @default(false) @map("reminder_sent")
+
+  leadId    String   @map("lead_id")
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id])
+  contactId String?  @map("contact_id")
+  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@map("calls")
+}
+
+// Model Email
+model Email {
+  id            String    @id @default(uuid()) @map("email_id")
+  fromAddress   String    @map("from_address")
+  toAddress     String    @map("to_address")
+  ccAddress     String?   @map("cc_address")
+  bccAddress    String?   @map("bcc_address")
+  subject       String?
+  body          String?   @db.Text
+  attachmentUrl String?   @map("attachment_url")
+  sentAt        DateTime  @default(now()) @map("sent_at")
+  scheduledAt   DateTime? @map("scheduled_at")
+
+  leadId String @map("lead_id")
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@map("emails")
+}
+
+// Model Tagihan
+model Invoice {
+  id            String        @id @default(uuid()) @map("invoice_id")
+  invoiceNumber String        @unique @map("invoice_number")
+  status        InvoiceStatus @default(DRAFT)
+  invoiceDate   DateTime      @map("invoice_date")
+  dueDate       DateTime      @map("due_date")
+  notes         String?       @db.Text
+  subtotal      Decimal       @db.Decimal(19, 4)
+  taxPercent    Decimal?      @default(0) @map("tax_percent") @db.Decimal(5, 2)
+  totalAmount   Decimal       @map("total_amount") @db.Decimal(19, 4)
+
+  leadId String        @map("lead_id")
+  lead   Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  items  InvoiceItem[]
+
+  @@map("invoices")
+}
+
+// Model Item Tagihan
+model InvoiceItem {
+  id        String  @id @default(uuid()) @map("item_id")
+  itemName  String  @map("item_name")
+  quantity  Int
+  unitPrice Decimal @map("unit_price") @db.Decimal(19, 4)
+  total     Decimal @db.Decimal(19, 4)
+
+  invoiceId String  @map("invoice_id")
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_items")
+}
+
+// ====================================================
+// 4. MODEL PENGATURAN & LOG
+// ====================================================
+
+// Model Notifikasi
+model Notification {
+  id        String   @id @default(uuid())
+  message   String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  userId String  @map("user_id")
+  user   User    @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  leadId String? @map("lead_id")
+  lead   Lead?   @relation("LeadNotifications", fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Model Preferensi Notifikasi User
+model NotificationPreference {
+  id        String  @id @default(cuid())
+  userId    String  @unique @map("user_id")
+  
+  // Toggle Settings
+  emailDealUpdates       Boolean @default(true) @map("email_deal_updates")
+  emailActivityReminders Boolean @default(true) @map("email_activity_reminders")
+  emailMarketing         Boolean @default(false) @map("email_marketing")
+  pushDealUpdates        Boolean @default(true) @map("push_deal_updates")
+  pushReminders          Boolean @default(true) @map("push_reminders")
+
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("notification_preferences")
+}
+
+// Model Log Audit
+model AuditLog {
+  id          String   @id @default(uuid()) @map("log_id")
+  actionType  String   @map("action_type")
+  detailsJson Json?    @map("details_json") // Menyimpan data sebelum/sesudah perubahan
+  timestamp   DateTime @default(now())
+  entityType  String?  @map("entity_type")
+  entityId    String?  @map("entity_id")
+
+  actorId  String? @map("user_id_actor")
+  actor    User?   @relation("Actor", fields: [actorId], references: [id])
+  targetId String? @map("user_id_target")
+  target   User?   @relation("Target", fields: [targetId], references: [id])
+
+  @@map("audit_logs")
+}
+
+// Model Profil Organisasi (Billed By)
+model OrganizationProfile {
+  id           String   @id @default(uuid())
+  companyName  String
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  province     String?
+  country      String?
+  email        String?
+  phone        String?
+  website      String?
+  logoUrl      String?
+  updatedAt    DateTime @updatedAt
+
+  @@map("organization_profiles") // Menjaga nama tabel di DB tetap rapi dengan snake_case
+}
+
+// Model Definisi Field Kustom
+model CustomField {
+  id     String             @id @default(uuid())
+  name   String
+  type   CustomFieldType
+  values CustomFieldValue[]
+
+  @@map("custom_fields")
+}
+
+// Model Nilai Field Kustom
+model CustomFieldValue {
+  id    String @id @default(uuid())
+  value String @db.Text
+
+  leadId  String      @map("lead_id")
+  lead    Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  fieldId String      @map("field_id")
+  field   CustomField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, fieldId])
+  @@map("custom_field_values")
+}
+
+// ====================================================
+// 5. ENUMS (KUMPULAN TIPE DATA)
+// ====================================================
+
+enum Status {
+  ACTIVE
+  INACTIVE
+  ONBOARDING
+  ON_LEAVE
+}
+
+enum LeadStatus {
+  ACTIVE
+  WON
+  LOST
+}
+
+enum CallDirection {
+  INCOMING
+  OUTGOING
+}
+
+enum CallStatus {
+  SCHEDULED
+  COMPLETED
+  MISSED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+}
