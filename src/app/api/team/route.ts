@@ -80,9 +80,9 @@ export async function POST(req: Request) {
   try {
     // 🔒 Security Check (Only Admin)
     const user = await getSessionUser(req);
-    if (!user || user.role !== 'ADMIN') {
-        return NextResponse.json({ message: "Forbidden: Admin access required" }, { status: 403 });
-    }
+    if (!user || user.role.toUpperCase() !== 'ADMIN') {
+    return NextResponse.json({ message: "Forbidden: Admin access required" }, { status: 403 });
+}
 
     const body = await req.json();
     const { fullName, email, password, roleName, phone, department, roleTitle } = body;

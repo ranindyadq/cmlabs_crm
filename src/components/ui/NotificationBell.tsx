@@ -106,9 +106,9 @@ export default function NotificationBell() {
       {/* --- TOMBOL LONCENG --- */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-full hover:bg-gray-100 dark:hover:bg-[#3B3285] transition text-gray-600 dark:text-gray-300 hover:text-[#5A4FB5] dark:hover:text-[#CAA9FF]"
+        className="relative p-2 rounded-full bg-white dark:bg-[#3B3285] transition text-gray-600 dark:text-gray-300 hover:text-[#5A4FB5] dark:hover:text-[#CAA9FF]"
       >
-        <Bell size={20} />
+        <Bell size={18} />
         
         {/* Badge Merah */}
         {unreadCount > 0 && (

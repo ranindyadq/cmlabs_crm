@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import jwt from "jsonwebtoken";
-import { getGoogleUserFromCode } from "@/lib/google"; // Helper baru kita
-import { serialize } from 'cookie';
+import { getGoogleUserFromCode } from "@/lib/google";
+import { JWT_SECRET } from '@/lib/constants';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_crm_dua_puluh_lima';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 async function logAudit(actorId: string | null, targetId: string | null, actionType: string, details: any) {
@@ -22,7 +21,7 @@ export async function GET(req: Request) {
     const code = searchParams.get("code");
 
     if (!code) {
-      return NextResponse.redirect(`${FRONTEND_URL}/auth/login?error=no_code`);
+      return NextResponse.redirect(`${FRONTEND_URL}/auth/signin?error=no_code`);
     }
 
     // 2. Tukar Code -> Data User (Pengganti Passport Middleware)
@@ -55,9 +54,21 @@ export async function GET(req: Request) {
             include: { role: { select: { name: true } } }
         });
         await logAudit(user.id, user.id, 'USER_SIGNUP', { method: 'Google OAuth' });
+
+        const token = jwt.sign(
+            { id: user.id, email: user.email, role: user.role.name, status: user.status },
+            JWT_SECRET,
+            { expiresIn: '1d' }
+        );
         
-        // Logic Lama: Jika Pending -> Redirect ke page pending
-        return NextResponse.redirect(`${FRONTEND_URL}/auth/oauth-pending`);
+        // Arahkan ke halaman penangkap token, tapi kasih info kalau ini user baru
+        const callbackUrl = new URL(`${FRONTEND_URL}/auth/social-callback`);
+        callbackUrl.searchParams.set('token', token);
+        callbackUrl.searchParams.set('role', user.role.name);
+        callbackUrl.searchParams.set('name', user.fullName);
+        callbackUrl.searchParams.set('new_user', 'true'); // Penanda user baru
+        
+        return NextResponse.redirect(callbackUrl);
     }
 
     // Skenario: User Lama tapi belum link Google
@@ -69,7 +80,7 @@ export async function GET(req: Request) {
     }
 
     if (user.status === 'INACTIVE') {
-      return NextResponse.redirect(`${FRONTEND_URL}/auth/login?error=account_disabled`);
+      return NextResponse.redirect(`${FRONTEND_URL}/auth/signin?error=account_disabled`);
     } 
 
     // 4. Update Login & Audit
@@ -81,26 +92,27 @@ export async function GET(req: Request) {
 
     // 5. Generate Token
     const token = jwt.sign(
-      { id: user.id, role: user.role.name },
+      { 
+        id: user.id,
+        sub: user.id,
+        email: user.email,
+        role: user.role.name,
+        status: user.status
+      },
       JWT_SECRET,
-      { expiresIn: '8h' }
+      { expiresIn: '1d' }
     );
 
-    const cookie = serialize('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 8,
-    }); 
+    // Kita arahkan ke halaman "Penangkap Token" di frontend
+    const callbackUrl = new URL(`${FRONTEND_URL}/auth/social-callback`);
+    callbackUrl.searchParams.set('token', token);
+    callbackUrl.searchParams.set('role', user.role.name);
+    callbackUrl.searchParams.set('name', user.fullName);
 
-    // 6. Redirect ke Dashboard (Sesuai Logic Lama)
-    const response = NextResponse.redirect(`${FRONTEND_URL}/dashboard`);
-    response.headers.set('Set-Cookie', cookie);
-    return response;
+    return NextResponse.redirect(callbackUrl);
 
   } catch (error) {
     console.error('Error in googleOAuthCallback:', error);
-    return NextResponse.redirect(`${FRONTEND_URL}/auth/login?error=oauth_failed`);
+    return NextResponse.redirect(`${FRONTEND_URL}/auth/signin?error=oauth_failed`);
   }
 }

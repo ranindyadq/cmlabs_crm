@@ -8,7 +8,7 @@ export default function EmailTab({  leadId,
   onRefresh 
 }: { 
   leadId: string; 
-  onRefresh: () => void 
+  onRefresh?: () => void; 
 }) {
   const [emails, setEmails] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +21,7 @@ export default function EmailTab({  leadId,
 
   const fetchEmails = async () => {
     try {
-      onRefresh();
+      onRefresh?.();
       setLoading(true);
       const res = await apiClient.get(`/leads/${leadId}?activity_type=EMAIL`);
       setEmails(res.data.data.emails || []);

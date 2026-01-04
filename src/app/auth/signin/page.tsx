@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import InputWithLabel from "@/components/ui/InputWithLabel";
@@ -20,40 +20,47 @@ export default function SignInPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+
+  useEffect(() => {
+  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  if (token) router.replace("/dashboard");
+  }, [router]);
 
   // 💥 fungsi login ke backend
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-
+  
     try {
-      const res = await apiClient.post("/auth/login", { 
-        email, 
-        password 
-      });
+    const res = await apiClient.post("/auth/login", { email, password }); // Sesuaikan API call Anda
 
-      // Data ada di res.data (Axios style)
-      const data = res.data;
+    // Cek apakah login sukses
+    if (res.data && res.data.token) {
+        const token = res.data.token;
+        const user = res.data.user;
 
-      // ✅ Berhasil
-      console.log("Login success:", data);
+        // 1. SIMPAN KE LOCALSTORAGE (Wajib untuk AuthGuard)
+        localStorage.setItem("token", token);
+        localStorage.setItem("user", JSON.stringify(user));
 
-      // Simpan Token & Role
-      localStorage.setItem("token", data.token);
-      if (data.role) localStorage.setItem("role", data.role);
+        // 2. SIMPAN KE COOKIE (Wajib untuk mencegah Looping Middleware)
+        // Kita set cookie secara manual lewat JavaScript
+        document.cookie = `token=${token}; path=/; max-age=86400; SameSite=Lax`;
 
-      setSuccess("Login successful! Redirecting...");
-      
-      // Redirect ke Dashboard
-      setTimeout(() => {
-         window.location.href = "/dashboard";
-      }, 1000);
+        // 3. TUNGGU SEBENTAR SEBELUM REDIRECT
+        // Beri waktu browser menyimpan data agar AuthGuard tidak "kaget"
+        setTimeout(() => {
+             // Pakai window.location.href agar halaman refresh total (Reload State)
+             window.location.href = "/dashboard";
+        }, 500);
+        
+        return; // Stop eksekusi
+    }
 
     } catch (err: any) {
-      console.error(err);
-      // Axios error object structure
-      const errorMessage = err.response?.data?.message || err.message || "Login failed";
+       const errorMessage = err.response?.data?.message || err.message || "Login failed";
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -107,6 +114,7 @@ export default function SignInPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
+          isError={!!error}
         />
         <InputWithLabel
           label="Password"
@@ -116,6 +124,7 @@ export default function SignInPage() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          isError={!!error}
         />
 
         {error && <p className="text-red-500 text-xs">{error}</p>}
@@ -127,7 +136,11 @@ export default function SignInPage() {
           }`}
         >
           <label className="flex items-center gap-2">
-            <input type="checkbox" /> Remember Me
+            <input 
+            type="checkbox" 
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            /> Remember Me
           </label>
           <Link
             href="/auth/forgot-password"

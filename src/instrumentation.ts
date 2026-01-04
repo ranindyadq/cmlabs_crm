@@ -1,4 +1,3 @@
-// src/instrumentation.ts
 
 export async function register() {
   // Kita cek runtime agar cron job hanya jalan di lingkungan Node.js (bukan di Edge/Browser)

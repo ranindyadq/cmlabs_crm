@@ -11,7 +11,7 @@ export default function CallTab({  leadId,
   onRefresh 
 }: { 
   leadId: string; 
-  onRefresh: () => void 
+  onRefresh?: () => void;
 }) {
   const [calls, setCalls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,7 +31,7 @@ export default function CallTab({  leadId,
   // 1. FETCH CALLS
   const fetchCalls = async () => {
     try {
-      onRefresh();
+      onRefresh?.();
       setLoading(true);
       const res = await apiClient.get(`/leads/${leadId}?activity_type=CALL`);
       setCalls(res.data.data.calls || []);

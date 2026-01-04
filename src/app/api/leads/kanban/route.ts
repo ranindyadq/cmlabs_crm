@@ -22,6 +22,16 @@ export async function GET(req: Request) {
             deletedAt: null,
             status: { notIn: ['WON', 'LOST'] } // Hanya Leads Aktif
         };
+
+        // Asumsi: getSessionUser mengembalikan role name (misal: "SALES", "ADMIN")
+        // Jika user adalah SALES, PAKSA filter hanya milik dia sendiri
+        if (user.role === 'SALES') {
+            baseWhere.ownerId = user.id; 
+        } else {
+            // Jika Admin/Owner, baru boleh pakai filter dari URL
+            const picId = searchParams.get('picId');
+            if (picId) baseWhere.ownerId = picId;
+        }
         
         if (picId) baseWhere.ownerId = picId;
         if (source) baseWhere.sourceOrigin = source;

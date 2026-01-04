@@ -54,7 +54,14 @@ export default function TeamPage() {
  const fetchTeam = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/team?search=${query}`);
+      const res = await fetch(`/api/team?search=${query}`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      // WAJIB: Supaya cookie token terkirim ke API
+      credentials: "include", 
+    });
       const result = await res.json();
       setMembers(result.data || []);
     } catch (error) {
@@ -144,11 +151,11 @@ export default function TeamPage() {
             className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full mb-3"
             style={{
               backgroundColor: hexWithAlpha(STATUS[m.status?.toLowerCase()]?.color || "#137337", "22"),
-                  color: STATUS[m.status?.toLowerCase()]?.color || "#137337",
+                color: STATUS[m.status?.toLowerCase()]?.color || "#137337",
             }}
           >
             {statusIcon(m.status)}
-            <span>{STATUS[m.status].label}</span>
+            <span>{STATUS[m.status?.toLowerCase()]?.label || m.status}</span>
           </div>
 
           <div className="flex flex-col items-center gap-3">

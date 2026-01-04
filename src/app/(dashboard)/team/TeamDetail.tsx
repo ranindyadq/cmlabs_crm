@@ -228,16 +228,12 @@ export default function TeamDetail({ member }: TeamDetailProps) {
           {/* TAB CONTENT — scrollable */}
           <div className="p-6 flex-1 overflow-y-auto">
             {activeTab === "overview" && <OverviewTab member={member} />}
-            {activeTab === "deals" && <DealsTab />}
-            {activeTab === "performance" && (
-              <div className="max-h-[65vh] overflow-y-auto pr-2">
-                <PerformanceTab />
-              </div>
-            )}
-          </div>
+            {activeTab === "deals" && <DealsTab memberId={member.id} />}
+            {activeTab === "performance" && <PerformanceTab memberId={member.id} />}
+            </div>
         </div>
       </div>
-
+      
       {/* POPUP MODALS — remain unchanged */}
       <EditDeleteModals
         openEdit={openEdit}

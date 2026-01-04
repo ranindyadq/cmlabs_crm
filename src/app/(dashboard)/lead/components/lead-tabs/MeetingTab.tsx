@@ -9,7 +9,7 @@ import { Plus, Video, Calendar, Clock, MapPin } from "lucide-react";
 // 1. UPDATE INTERFACE PROPS
 interface MeetingTabProps {
   leadId: string;
-  onRefresh: () => void;
+  onRefresh?: () => void;
   showForm?: boolean;      
   setShowForm?: (val: boolean) => void;
 }
@@ -36,7 +36,7 @@ export default function MeetingTab({
   // 1. FETCH MEETINGS
   const fetchMeetings = async () => {
     try {
-      onRefresh();
+      onRefresh?.();
       setLoading(true);
       const res = await apiClient.get(`/leads/${leadId}?activity_type=MEETING`);
       // Backend mengembalikan object lead dengan include meetings

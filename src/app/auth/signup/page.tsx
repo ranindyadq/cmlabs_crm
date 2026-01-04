@@ -48,7 +48,7 @@ export default function SignUpPage() {
 
       // Redirect ke Sign In
       setTimeout(() => {
-        router.push("/auth/signin"); // Sesuaikan path login Anda (/auth/signin atau /auth/login)
+        router.push("/auth/signin"); // Sesuaikan path login Anda
       }, 2000);
 
     } catch (err: any) {
@@ -96,7 +96,7 @@ export default function SignUpPage() {
   </div>
 
       {/* FORM */}
-      <div className="flex-grow overflow-y-auto px-1">
+      <div className="px-1">
         <form className="space-y-1" onSubmit={handleSubmit}>
           <InputWithLabel
             label="Full Name"

@@ -150,7 +150,7 @@ export async function PATCH(
     // 2. Cek Data Lama (untuk validasi Owner)
     const existingLead = await prisma.lead.findUnique({ 
         where: { id },
-        select: { ownerId: true } 
+        select: { ownerId: true , stage: true }
     });
 
     if (!existingLead) {
@@ -164,6 +164,9 @@ export async function PATCH(
 
     // 4. Proses Data
     const body = await req.json();
+
+    // Simpan status lama sebelum update untuk perbandingan
+    const oldStage = existingLead.stage;
     
     // Siapkan object update yang bersih
     const updateData: any = { ...body };
@@ -189,13 +192,29 @@ export async function PATCH(
         updateData.value = Number(updateData.value);
     }
 
-    // 5. Update DB
-    const updatedLead = await prisma.lead.update({
-      where: { id },
-      data: updateData,
-    });
-
-    // Opsional: Anda bisa menambahkan logika Notifikasi di sini jika diperlukan
+    // 5. Update DB & 🔥 Create Audit Log (Gunakan Transaction)
+    const [updatedLead] = await prisma.$transaction([
+        // A. Update Lead
+        prisma.lead.update({
+            where: { id },
+            data: updateData,
+        }),
+        // B. Catat History jika Stage berubah
+        ...(body.stage && body.stage !== oldStage ? [
+            prisma.auditLog.create({
+                data: {
+                    actionType: "CHANGE_STAGE",
+                    entityType: "LEAD",
+                    entityId: id,
+                    actorId: user.id,
+                    detailsJson: { // Simpan perubahan
+                        from: oldStage,
+                        to: body.stage
+                    }
+                }
+            })
+        ] : [])
+    ]);
 
     return NextResponse.json({
       message: 'Lead updated successfully',

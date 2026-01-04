@@ -1,180 +1,164 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import { getSessionUser } from "@/lib/auth-helper";
 
-// Helper untuk serialize BigInt
-const serializeBigInt = (data: any): any => {
-  return JSON.parse(JSON.stringify(data, (key, value) =>
-    typeof value === 'bigint' ? Number(value) : value
-  ));
-};
+export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
   try {
+    // 1. Cek Login
+    const user = await getSessionUser(req);
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+    // 2. Ambil Query Params
     const { searchParams } = new URL(req.url);
-    const picId = searchParams.get('picId');
-    const source = searchParams.get('source');
-    const startDate = searchParams.get('startDate');
-    const endDate = searchParams.get('endDate');
 
-    // --- 1. BASE CONDITIONS (Non-Date) ---
-    let baseConditions = Prisma.sql`1=1`;
-    if (picId) baseConditions = Prisma.sql`${baseConditions} AND "owner_id" = ${picId}`;
-    if (source) baseConditions = Prisma.sql`${baseConditions} AND "source_origin" = ${source}`;
-    
-    // --- 2. DYNAMIC DATE CONDITIONS ---
-    let createdDateConditions = Prisma.sql`1=1`;
-    let closedDateConditions = Prisma.sql`1=1`;
+    const picIdParam = searchParams.get("picId");
+    const startDateParam = searchParams.get("startDate");
+    const endDateParam = searchParams.get("endDate");
+    const source = searchParams.get("source");
+    const status = searchParams.get("status");
 
-    if (startDate && endDate) {
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999); 
-        
-        // Filter untuk Estimasi/Lead Baru
-        createdDateConditions = Prisma.sql`AND "created_at" >= ${start} AND "created_at" <= ${end}`;
-        // Filter untuk Realisasi (WON)
-        closedDateConditions = Prisma.sql`AND "closed_at" >= ${start} AND "closed_at" <= ${end}`;
+    // Tentukan Start & End Date dulu sebelum query
+    let startDate: Date;
+    let endDate: Date;
+
+    if (startDateParam && endDateParam) {
+        // Jika User pilih custom date (misal: 2025)
+        startDate = new Date(startDateParam);
+        endDate = new Date(endDateParam);
+        endDate.setHours(23, 59, 59, 999); // Mentokkan ke akhir hari
     } else {
-        // Default 12 bulan terakhir
-        createdDateConditions = Prisma.sql`AND "created_at" >= NOW() - INTERVAL '12 months'`;
-        closedDateConditions = Prisma.sql`AND "closed_at" >= NOW() - INTERVAL '12 months'`;
+        // Default: 12 Bulan Terakhir dari SEKARANG
+        // (Agar chart nyambung dari 2025 ke 2026)
+        endDate = new Date();
+        startDate = new Date();
+        startDate.setMonth(startDate.getMonth() - 11); // Mundur 11 bulan
+        startDate.setDate(1); 
     }
-    
-    // ------------------------------------------------------------------
-    // 1. Leads By Month
-    // ------------------------------------------------------------------
-    const leadsByMonth = await prisma.$queryRaw`
-      SELECT TO_CHAR("created_at", 'Mon') as month, COUNT("lead_id")::int as count
-      FROM "leads"
-      WHERE "deleted_at" IS NULL 
-        AND ${baseConditions} 
-        ${createdDateConditions}  // <--- GANTI 'conditions' MENJADI INI
-      GROUP BY TO_CHAR("created_at", 'Mon'), TO_CHAR("created_at", 'YYYY-MM')
-      ORDER BY TO_CHAR("created_at", 'YYYY-MM') ASC
-    `;
 
-    // ------------------------------------------------------------------
-    // 2. Revenue Estimation (Semua Lead)
-    // ------------------------------------------------------------------
-    const revenueTrend = await prisma.$queryRaw`
-      SELECT 
-        TO_CHAR("created_at", 'Mon') AS month,
-        TO_CHAR("created_at", 'YYYY-MM') AS sort_key,
-        SUM("value")::float AS revenue
-      FROM "leads"
-      WHERE "deleted_at" IS NULL AND ${baseConditions} ${createdDateConditions}
-      GROUP BY TO_CHAR("created_at", 'Mon'), TO_CHAR("created_at", 'YYYY-MM')
-      ORDER BY TO_CHAR("created_at", 'YYYY-MM') ASC
-    `;
+    // 3. Buat Filter Kondisi
+    const whereCondition: any = {
+      deletedAt: null,
+    };
 
-    // ------------------------------------------------------------------
-    // 🔥 3. Revenue Realisation (Hanya Lead yang WON)
-    // ------------------------------------------------------------------
-    const realisationTrend = await prisma.$queryRaw`
-      SELECT 
-        TO_CHAR("closed_at", 'Mon') AS month,
-        TO_CHAR("closed_at", 'YYYY-MM') AS sort_key,
-        SUM("value")::float AS realisation
-      FROM "leads"
-      WHERE "deleted_at" IS NULL 
-        AND "status" = 'WON'
-        AND "closed_at" IS NOT NULL
-        AND ${baseConditions} ${closedDateConditions}
-      GROUP BY TO_CHAR("closed_at", 'Mon'), TO_CHAR("closed_at", 'YYYY-MM')
-      ORDER BY TO_CHAR("closed_at", 'YYYY-MM') ASC
-    `;
+    if (user.role === 'ADMIN') {
+      if (picIdParam) whereCondition.ownerId = picIdParam;
+    } else {
+      whereCondition.ownerId = user.id;
+    }
 
-    // ------------------------------------------------------------------
-    // 🔥 4. Gabungkan Revenue Estimation dan Realisation
-    // ------------------------------------------------------------------
-    const revenueMap = new Map();
-    
-    // Masukkan data estimation
-    (revenueTrend as any[]).forEach((item: any) => {
-      revenueMap.set(item.month, {
-        month: item.month,
-        estimation: item.revenue || 0,
-        realisation: 0
-      });
+    if (source) whereCondition.sourceOrigin = source;
+    if (status) whereCondition.status = status;
+
+    whereCondition.createdAt = {
+       gte: startDate,
+       lte: endDate,
+    };
+
+    // 4. FETCH DATA (Cukup 1x Query untuk semua Chart)
+    // Kita pakai findMany agar bisa menghitung Value (Revenue) dan Source sekaligus.
+    const leads = await prisma.lead.findMany({
+      where: whereCondition,
+      select: {
+        id: true,
+        createdAt: true,
+        value: true,
+        status: true,
+        stage: true,
+        sourceOrigin: true,
+      },
+      orderBy: { createdAt: 'asc' }
     });
     
-    // Tambahkan data realisation
-    (realisationTrend as any[]).forEach((item: any) => {
-      if (revenueMap.has(item.month)) {
-        revenueMap.get(item.month).realisation = item.realisation || 0;
-      } else {
-        revenueMap.set(item.month, {
-          month: item.month,
-          estimation: 0,
-          realisation: item.realisation || 0
-        });
+    // 5. DATA PROCESSING: Normalisasi 12 Bulan (Jan - Dec)
+    const allMonths: string[] = [];
+    let current = new Date(startDate);
+    current.setDate(1); // Set tanggal 1 biar looping bulan aman
+    
+    // Loop dari Start sampai End untuk bikin label (misal: "Jan 2025", "Feb 2025")
+    while (current <= endDate) {
+        const label = current.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        allMonths.push(label);
+        current.setMonth(current.getMonth() + 1);
+    }
+
+    // Mapping Data ke Bulan-Bulan Tersebut
+    const monthlyStats = allMonths.map((monthLabel) => {
+      // Filter leads yang label bulannya COCOK dengan label di chart
+      const leadsInThisMonth = leads.filter(l => {
+        const d = new Date(l.createdAt);
+        const leadLabel = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        return leadLabel === monthLabel;
+      });
+
+      // (LOGIC HITUNG DI BAWAH INI SAMA PERSIS DENGAN KODE LAMA ANDA)
+      const count = leadsInThisMonth.length;
+      const estimation = leadsInThisMonth.reduce((acc, curr) => acc + Number(curr.value || 0), 0);
+      const realisation = leadsInThisMonth
+        .filter(l => l.status === 'WON')
+        .reduce((acc, curr) => acc + Number(curr.value || 0), 0);
+
+      return {
+        month: monthLabel,
+        count,
+        estimation,
+        realisation
+      };
+    });
+
+    // Pisahkan hasil (SAMA)
+    const leadsByMonth = monthlyStats.map(m => ({ 
+      month: m.month, 
+      count: m.count 
+    }));
+
+    const revenueTrend = monthlyStats.map(m => ({
+      month: m.month,
+      estimation: m.estimation,
+      realisation: m.realisation
+    }));
+
+    // 6. PIPELINE OVERVIEW (Group by Stage)
+    // Hitung dari data 'leads' yang sudah diambil
+    const stageCounts: Record<string, number> = {};
+    leads.forEach(lead => {
+      if (lead.status === 'ACTIVE') { // Biasanya pipeline hanya menghitung yang Aktif
+         const stage = lead.stage || 'Unassigned';
+         stageCounts[stage] = (stageCounts[stage] || 0) + 1;
       }
     });
-    
-    // Convert Map ke Array
-    const combinedRevenueTrend = Array.from(revenueMap.values());
 
-    // ------------------------------------------------------------------
-    // 5. Pipeline Overview
-    // ------------------------------------------------------------------
-    const pipelineWhere: any = { 
-        deletedAt: null, 
-        status: { notIn: ['WON', 'LOST'] } 
-    };
-    if (picId) pipelineWhere.ownerId = picId;
-    if (source) pipelineWhere.sourceOrigin = source;
-    if (status && status !== 'WON' && status !== 'LOST') {
-        pipelineWhere.status = status; 
-    }
-    if (startDate && endDate) {
-        pipelineWhere.createdAt = { gte: new Date(startDate), lte: new Date(endDate) };
-    }
+    const pipelineOverview = Object.keys(stageCounts).map(stage => ({
+      stage,
+      count: stageCounts[stage]
+    }));
 
-    const stageData = await prisma.lead.groupBy({
-      by: ['stage'],
-      _count: { _all: true },
-      where: pipelineWhere
+    // 7. SOURCE BREAKDOWN (Group by Source)
+    const sourceCounts: Record<string, number> = {};
+    leads.forEach(lead => {
+      const src = lead.sourceOrigin || 'Unknown';
+      sourceCounts[src] = (sourceCounts[src] || 0) + 1;
     });
 
-    // ------------------------------------------------------------------
-    // 6. Source Breakdown
-    // ------------------------------------------------------------------
-    const sourceBreakdownWhere: any = { deletedAt: null };
-    if (picId) sourceBreakdownWhere.ownerId = picId;
-    if (source) sourceBreakdownWhere.sourceOrigin = source;
+    const sourceBreakdown = Object.keys(sourceCounts).map(name => ({
+      name,
+      value: sourceCounts[name]
+    }));
 
-    const sourceData = await prisma.lead.groupBy({
-      by: ['sourceOrigin'],
-      _count: { _all: true },
-      where: sourceBreakdownWhere
-    });
-
-    // ------------------------------------------------------------------
-    // Format Data Akhir
-    // ------------------------------------------------------------------
-    const responseData = {
-        leadsByMonth: serializeBigInt(leadsByMonth),
-        revenueTrend: serializeBigInt(combinedRevenueTrend), // 🔥 Data gabungan
-        pipelineOverview: stageData.map(i => ({
-          stage: i.stage || 'Unassigned',
-          count: i._count._all
-        })),
-        sourceBreakdown: sourceData.map(i => ({
-          name: i.sourceOrigin || 'Unknown',
-          value: i._count._all
-        }))
-    };
-
+    // 8. Return Response
     return NextResponse.json({
-        data: responseData
+      success: true,
+      data: {
+        leadsByMonth,      // ✅ Full 12 Bulan
+        revenueTrend,      // ✅ Full 12 Bulan (Estimation vs Realisation)
+        sourceBreakdown,   // ✅ Pie Chart Data
+        pipelineOverview   // ✅ Funnel Data
+      }
     });
 
   } catch (error: any) {
-    console.error("🔥 Dashboard Charts Error:", error);
-    return NextResponse.json({ 
-      message: "Internal Error", 
-      detail: error.message 
-    }, { status: 500 });
+    console.error("[Dashboard Charts API Error]", error);
+    return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
   }
 }

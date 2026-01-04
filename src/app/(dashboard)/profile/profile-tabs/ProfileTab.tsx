@@ -47,7 +47,7 @@ export default function ProfileTab() {
     const fetchProfile = async () => {
       try {
         setLoading(true);
-        // Endpoint /api/profile yang mengembalikan data user + userWorkInfo
+        // Endpoint /api/profile yang mengembalikan data user + workInfo
         const res = await apiClient.get("/profile"); 
         const user = res.data.data;
 

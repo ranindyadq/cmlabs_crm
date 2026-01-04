@@ -53,7 +53,7 @@ const processActivityReminders = async (activities: any[], type: 'Meeting' | 'Ca
   }
 };
 
-const checkAndSendReminders = async () => {
+export const checkAndSendReminders = async () => {
   const now = new Date();
 
   // 1. Ambil Meeting
@@ -78,7 +78,9 @@ const checkAndSendReminders = async () => {
   if (calls.length > 0) await processActivityReminders(calls, 'Call');
 };
 
+
+// Fungsi Start untuk Localhost (Node-cron)
 export const startReminderScheduler = () => {
   cron.schedule('* * * * *', checkAndSendReminders);
-  console.log("⏰ Scheduler Reminder Service started.");
+  console.log("⏰ Scheduler Reminder Service started (Local Mode).");
 };

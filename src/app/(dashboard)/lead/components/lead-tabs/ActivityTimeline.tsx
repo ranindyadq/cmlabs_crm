@@ -9,7 +9,7 @@ export default function ActivityTimeline({
   onRefresh 
 }: { 
   leadId: string; 
-  onRefresh: () => void 
+  onRefresh?: () => void;
 }) {
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,7 +18,7 @@ export default function ActivityTimeline({
   // 1. FETCH SEMUA AKTIVITAS
   const fetchTimeline = async () => {
     try {
-      onRefresh();
+      onRefresh?.();
       setLoading(true);
       // Kita panggil detail lead, backend biasanya sudah include relasi (notes, meetings, dll)
       // Jika backend Anda memisahkan, Anda mungkin perlu Promise.all() ke beberapa endpoint.

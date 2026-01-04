@@ -26,43 +26,22 @@ import NotificationBell from "@/components/ui/NotificationBell";
 import { Suspense } from "react";
 import apiClient from "@/lib/apiClient";
 import DashboardSkeleton from "@/components/ui/DashboardSkeleton";
+import AuthGuard from "@/components/auth/AuthGuard";
 
-// --- KOMPONEN ISI LAYOUT (Logic Utama Disini) ---
-// === 1. AUTH GUARD WRAPPER (Penjaga Pintu Utama) ===
-function AuthGuard({ children }: { children: ReactNode }) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [isAuthorized, setIsAuthorized] = useState(false);
-
-  useEffect(() => {
-    // Cek Token dari URL (Login Google)
-    const urlToken = searchParams.get("token");
-    if (urlToken) {
-      localStorage.setItem("token", urlToken);
-      window.history.replaceState({}, document.title, window.location.pathname);
-      setIsAuthorized(true);
-      return;
-    }
-
-    // Cek Token dari LocalStorage
-    const token = localStorage.getItem("token");
-    if (!token) {
-      // Jika tidak ada token, tendang ke login
-      router.replace("/auth/signin");
-    } else {
-      // Jika ada token, izinkan render
-      setIsAuthorized(true);
-    }
-  }, [router, searchParams]);
-
-  // 🔥 PENTING: JANGAN RENDER ANAKNYA JIKA BELUM AUTHORIZED
-  // Ini mencegah NotificationBell jalan duluan sebelum token siap
-  if (!isAuthorized) {
-    return <DashboardSkeleton />;
+// Helper kecil untuk mencari token di kedua tempat
+function getToken() {
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("token") || sessionStorage.getItem("token");
   }
-
-  return <>{children}</>;
+  return null;
 }
+
+const getUser = () => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("user") || sessionStorage.getItem("user");
+    }
+    return null;
+  };
 
 // --- KOMPONEN ISI LAYOUT ---
 function DashboardContent({ children }: { children: ReactNode }) {
@@ -75,12 +54,12 @@ function DashboardContent({ children }: { children: ReactNode }) {
 
   // 2. FETCH DATA USER DARI LOCALSTORAGE SAAT MOUNT
   useEffect(() => {
-    const userData = localStorage.getItem("user");
+    const userData = getUser();
     if (userData) {
       try {
         const parsedUser = JSON.parse(userData);
         setUser({
-          name: parsedUser.fullName || "User",
+          name: parsedUser.name || parsedUser.fullName || "User",
           email: parsedUser.email || "user@cmlabs.co",
           role: parsedUser.role || ""
         });
@@ -155,19 +134,54 @@ function DashboardContent({ children }: { children: ReactNode }) {
   }, []);
 
   // ✅ LOGIKA LOGOUT
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsUserMenuOpen(false);
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    window.location.href = "/auth/signin"; // Hard refresh
+
+    // 1. Panggil API untuk hapus Cookie (Tunggu sampai selesai)
+    try {
+      await apiClient.post("/auth/logout");
+    } catch (error) {
+      console.error("Logout API failed", error);
+    }
+
+    // 2. Bersihkan Storage Browser (Untuk UI)
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // 3. Paksa Refresh Halaman ke Signin
+    // Gunakan 'location.href' agar browser benar-benar memuat ulang state middleware
+    window.location.href = "/auth/signin";
   };
 
   const navItems = [
-    { name: "Dashboard", icon: Home, href: "/dashboard" },
-    { name: "Leads", icon: Globe, href: "/lead" },
-    { name: "Team", icon: Users, href: "/team" },
-    { name: "Profile", icon: UserCircle, href: "/profile" },
+    { 
+      name: "Dashboard", 
+      icon: Home, 
+      href: "/dashboard", 
+      roles: ["ADMIN", "SALES", "VIEWER"]
+    },
+    { 
+      name: "Leads", 
+      icon: Globe, 
+      href: "/lead", 
+      roles: ["ADMIN", "SALES"]
+    },
+    { 
+      name: "Team", 
+      icon: Users, 
+      href: "/team", 
+      roles: ["ADMIN"]
+    },
+    { 
+      name: "Profile", 
+      icon: UserCircle, 
+      href: "/profile", 
+      roles: ["ADMIN", "SALES", "VIEWER"] 
+    },
   ];
+  const filteredNavItems = navItems.filter(item => 
+     item.roles.includes(user.role) || item.roles.includes("ALL")
+  );
 
   const footerItems = [
     { name: "Get Help", icon: HelpCircle, href: "#" },
@@ -175,13 +189,14 @@ function DashboardContent({ children }: { children: ReactNode }) {
   ];
 
   return (
-    <div className="h-screen flex bg-[#F5F6FA] dark:bg-[#2B265E] text-[#2E2E2E] p-3 gap-6 overflow-hidden">
+    <AuthGuard>
+    <div className="h-screen flex bg-[#F5F6FA] dark:bg-[#2B265E] text-[#2E2E2E] p-3 gap-5 overflow-hidden">
       
       {/* === SIDEBAR === */}
       <aside 
         className={`
           bg-white dark:bg-[#3B3285] rounded-2xl flex flex-col justify-between py-5 shadow-md overflow-y-auto transition-all duration-300
-          ${isSidebarOpen ? "w-64 px-5" : "w-20 px-3 items-center"} 
+          ${isSidebarOpen ? "w-60 px-4" : "w-20 px-3 items-center"} 
         `}
       >
         <div>
@@ -228,8 +243,8 @@ function DashboardContent({ children }: { children: ReactNode }) {
                     flex items-center gap-3 py-2 text-sm font-medium transition rounded-lg
                     ${isSidebarOpen ? "pl-5 pr-3 w-full" : "justify-center w-full px-0"}
                     ${isActive 
-                      ? "bg-[#CAA9FF] text-[#2E2E2E]" 
-                      : "hover:bg-gray-100 text-gray-700"
+                      ? "bg-[#F0F2F5] text-[#5A4FB5]" 
+                      : "hover:bg-gray-50 text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-black"
                     }
                   `}
                   title={!isSidebarOpen ? item.name : ""} // Tooltip saat tutup
@@ -269,7 +284,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
       {/* === MAIN SECTION === */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         {/* === HEADER === */}
-        <header className="flex justify-between items-center mb-6 flex-shrink-0">
+        <header className="flex justify-between items-center mb-4 flex-shrink-0">
           
           {/* Left: Menu + Search */}
           <div className="flex items-center gap-3 w-1/2">
@@ -303,22 +318,22 @@ function DashboardContent({ children }: { children: ReactNode }) {
             <NotificationBell />
 
             {/* Theme Toggle */}
-            <div className="flex border border-gray-300 dark:border-gray-600 rounded-full overflow-hidden">
+            <div className="flex items-center bg-white dark:bg-gray-800 rounded-full p-1">
               <button
                 onClick={() => theme !== "light" && toggleTheme()}
-                className={`w-7 h-7 flex items-center justify-center transition-colors ${
+                className={`p-1.5 rounded-full transition ${
                   theme === "light" ? "bg-[#5A4FB5] text-white" : "text-black"
                 }`}
               >
-                <Sun size={14} />
+                <Sun size={16} />
               </button>
               <button
                 onClick={() => theme !== "dark" && toggleTheme()}
-                className={`w-7 h-7 flex items-center justify-center transition-colors ${
+                className={`p-1.5 rounded-full transition ${
                   theme === "dark" ? "bg-[#5A4FB5] text-white" : "text-black"
                 }`}
               >
-                <Moon size={14} />
+                <Moon size={16} />
               </button>
             </div>
 
@@ -327,7 +342,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
                 <button 
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} 
                   className={`
-                    flex items-center gap-3 pl-1 pr-3 py-1 rounded-full transition-all duration-200 border
+                    flex items-center gap-3 pl-1 pr-3 py-1 rounded-full bg-white dark:bg-[#3B3285] transition-all duration-200 border
                     ${isUserMenuOpen 
                       ? "bg-white border-[#5A4FB5] shadow-sm dark:bg-[#2C2C2C] dark:border-[#CAA9FF]" 
                       : "bg-transparent border-transparent hover:bg-white/50 hover:border-gray-200 dark:hover:bg-white/10 dark:hover:border-gray-700"
@@ -335,7 +350,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
                   `}
                 >
                     {/* Avatar: Gunakan inisial nama */}
-                    <div className="w-8 h-8 rounded-full bg-[#5A4FB5] text-white flex items-center justify-center text-xs font-bold shadow-sm">
+                    <div className="w-7 h-7 rounded-full bg-[#5A4FB5] text-white flex items-center justify-center text-xs font-bold shadow-sm">
                       {user.name.charAt(0).toUpperCase()}
                     </div>
                     
@@ -367,7 +382,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
                         </div>
 
                         {/* Menu Links */}
-                        <div className="p-2 space-y-1">
+                        <div className="p-2 space-y-0.5">
                             <Link 
                               href="/profile" 
                               className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-[#5A4FB5] dark:hover:text-[#CAA9FF] rounded-xl transition-colors" 
@@ -406,6 +421,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
         </div>
       </main>
     </div>
+    </AuthGuard>
   );
 }
 

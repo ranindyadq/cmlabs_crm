@@ -1,21 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-
-// Helper Audit (Bisa dipisah, tapi ditaruh sini agar mandiri)
-async function logAudit(actorId: string | null, targetId: string | null, actionType: string, details: any) {
-  try {
-    await prisma.auditLog.create({
-      data: { actorId, targetId, actionType, detailsJson: details || {} },
-    });
-  } catch (err) { console.error(`Audit Log Failed:`, err); }
-}
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { fullName, email, password } = body;
-
+    if (!fullName || !email || !password) {
+      return NextResponse.json({ message: 'Semua kolom wajib diisi.' }, { status: 400 });
+    }
+    if (password.length < 6) {
+      return NextResponse.json({ message: 'Kata sandi minimal 6 karakter.' }, { status: 400 });
+    }
     // 1. Cek duplikasi email (LOGIKA LAMA: 409 Conflict)
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {

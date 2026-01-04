@@ -3,23 +3,15 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { serialize } from 'cookie';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_crm_dua_puluh_lima';
-
-async function logAudit(actorId: string | null, targetId: string | null, actionType: string, details: any) {
-  try {
-    await prisma.auditLog.create({
-      data: { actorId, targetId, actionType, detailsJson: details || {} },
-    });
-  } catch (err) { console.error(`Audit Log Failed:`, err); }
-}
+import { JWT_SECRET } from '@/lib/constants';
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { email, password } = body;
+    const { email, password, rememberMe } = body;
 
-    // 1. Cari User + Role (LOGIKA LAMA: Include role name)
+    // 1. Cari User + Role + Status
     const user = await prisma.user.findUnique({
       where: { email },
       include: {
@@ -32,40 +24,60 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Email atau kata sandi salah.' }, { status: 401 });
     }
 
-    // 3. Validasi Status ACTIVE (LOGIKA LAMA: Status Check)
-    if (user.status !== 'ACTIVE') {
+    // 3. Validasi Status
+    // Hanya blokir jika 'INACTIVE'. Onboarding/OnLeave tetap boleh masuk.
+    if (user.status === 'INACTIVE') {
       return NextResponse.json({
-        message: `Akses ditolak. Status akun Anda: ${user.status.toLowerCase()}. Hubungi Admin untuk bantuan.`,
+        message: `Akses ditolak. Akun Anda telah dinonaktifkan Admin.`,
       }, { status: 403 });
     }
+    
+    const MAX_AGE_NORMAL = 60 * 60 * 8; 
+    const MAX_AGE_REMEMBER = 60 * 60 * 24 * 30; 
+    const tokenDuration = rememberMe ? '30d' : '8h';
+    const cookieDuration = rememberMe ? MAX_AGE_REMEMBER : MAX_AGE_NORMAL;
 
     // 4. Generate JWT
     const token = jwt.sign(
-      { id: user.id, role: user.role.name },
+      { 
+        sub: user.id, 
+        email: user.email, 
+        role: user.role.name,
+        status: user.status
+      },
       JWT_SECRET,
-      { expiresIn: '8h' }
+      { expiresIn: tokenDuration }
     );
 
-      const cookie = serialize('token', token, {
-      httpOnly: true, // Aman dari XSS
+    // 5. Set Cookie (HttpOnly)
+    const cookie = serialize('token', token, {
+      httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 8, // 8 jam
+      maxAge: cookieDuration,
     });
 
-    // 5. Update Last Login & Audit
+    // 6. Update Last Login & Audit
     await prisma.user.update({
       where: { id: user.id },
       data: { lastLogin: new Date() },
     });
     await logAudit(user.id, user.id, 'USER_SIGNIN_SUCCESS', { method: 'email/password' });
 
-    // 6. Return Response (Sesuai Frontend yg sudah connect)
+    // 7. RETURN RESPONSE
     const response = NextResponse.json({
       message: 'Login berhasil.',
+      token, 
       role: user.role.name,
-      token // Tetap kirim token untuk LocalStorage (apiClient)
+      user: {
+          id: user.id,
+          name: user.fullName,
+          email: user.email,
+          role: user.role.name,
+          status: user.status,
+          photo: user.photo || null 
+      }
     }, { status: 200 });
 
     response.headers.set('Set-Cookie', cookie);

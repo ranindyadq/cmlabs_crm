@@ -5,6 +5,7 @@ const API_BASE_URL = "/api";
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -14,20 +15,15 @@ const apiClient = axios.create({
 // 1. REQUEST INTERCEPTOR: MELAMPIRKAN TOKEN
 // ====================================================================
 
-apiClient.interceptors.request.use(
-  (config) => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('token');
-      
-      // --- DEBUG LOG (Hapus nanti jika sudah fix) ---
-      console.log("Interceptor: Token ditemukan?", !!token); 
-      // ---------------------------------------------
-
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
-    }
-    return config;
+// Interceptor untuk menyisipkan token otomatis
+apiClient.interceptors.request.use((config) => {
+  // ✅ UPDATE: Cek di localStorage dulu, kalau tidak ada cek sessionStorage
+  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
   },
   (error) => Promise.reject(error)
 );
@@ -48,7 +44,8 @@ apiClient.interceptors.response.use(
       console.warn("Sesi berakhir atau akses ditolak. Mengarahkan ke login...");
       
       // Hapus token yang busuk dari penyimpanan
-      localStorage.removeItem('token');
+      localStorage.clear();
+      sessionStorage.clear();
       
       // Arahkan ke halaman login
       // Karena ini bukan komponen React, kita gunakan window.location

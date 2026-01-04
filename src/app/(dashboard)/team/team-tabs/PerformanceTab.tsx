@@ -7,6 +7,7 @@ import {
   Clock,
   ArrowUp,
   ArrowDown,
+  Loader2,
 } from "lucide-react";
 
 import {
@@ -19,28 +20,36 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  
 } from "recharts";
+import { useEffect, useState } from "react"; 
+import apiClient from "@/lib/apiClient"; 
 
-// === Dummy example data ===
-const monthlyRevenue = [
-  { month: "Jul", revenue: 1200, target: 1400 },
-  { month: "Aug", revenue: 1500, target: 1600 },
-  { month: "Sep", revenue: 1700, target: 1750 },
-  { month: "Oct", revenue: 1800, target: 1900 },
-  { month: "Nov", revenue: 2000, target: 2100 },
-  { month: "Dec", revenue: 2200, target: 2300 },
-];
+// 1. Terima Prop memberId
+export default function PerformanceTab({ memberId }: { memberId: string }) {
+  // 2. State & Fetch Logic
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any>(null);
 
-const dealsClosed = [
-  { month: "Jan", value: 11 },
-  { month: "Feb", value: 15 },
-  { month: "Mar", value: 20 },
-  { month: "Apr", value: 18 },
-  { month: "May", value: 22 },
-  { month: "Jun", value: 14 },
-];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await apiClient.get(`/team/${memberId}/stats`);
+        setData(res.data.data.performanceTab);
+      } catch (error) {
+        console.error("Failed to fetch performance stats", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (memberId) fetchData();
+  }, [memberId]);
 
-export default function PerformanceTab() {
+  if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#5A4FB5]" /></div>;
+  if (!data) return <div>No performance data available.</div>;
+
+  const { kpis, chartData } = data; // Ambil data dari API
+
   return (
     <div className="space-y-8">
 
@@ -55,7 +64,7 @@ export default function PerformanceTab() {
           iconBg="#15803d55"
           icon={<DollarSign size={22} color="#15803d" />}
           label="Total Revenue (6 months)"
-          value="$196,000"
+          value={`Rp ${kpis.totalRevenue.toLocaleString("id-ID")}`} // Dinamis
           change="+12.5%"
           changeColor="#15803d"
           trend="up"
@@ -67,7 +76,7 @@ export default function PerformanceTab() {
           iconBg="#1d4ed855"
           icon={<Target size={22} color="#1d4ed8" />}
           label="Win Rate"
-          value="65%"
+          value={`${kpis.winRate}%`} // Dinamis
           change="+5%"
           changeColor="#15803d"
           trend="up"
@@ -79,7 +88,7 @@ export default function PerformanceTab() {
           iconBg="#7e22ce55"
           icon={<Package2 size={22} color="#7e22ce" />}
           label="Avg. Deal Size"
-          value="$19,600"
+          value={`Rp ${Math.round(kpis.avgDealSize).toLocaleString("id-ID")}`} // Dinamis
           change="-3.2%"
           changeColor="#de3334"
           trend="down"
@@ -91,7 +100,7 @@ export default function PerformanceTab() {
           iconBg="#c2410c55"
           icon={<Clock size={22} color="#c2410c" />}
           label="Avg. Close Time"
-          value="23 days"
+          value={`${kpis.dealsClosedCount}`} // Dinamis
           change="-12%"
           changeColor="#de3334"
           trend="down"
@@ -108,7 +117,7 @@ export default function PerformanceTab() {
 
         <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={monthlyRevenue}>
+            <LineChart data={chartData}>
                 {/* Grid */}
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.2)" />
 
@@ -188,7 +197,7 @@ export default function PerformanceTab() {
         <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
             <BarChart
-                data={dealsClosed}
+                data={chartData}
                 margin={{ left: -30, right: 0 }}
             >
                 <XAxis
@@ -230,7 +239,7 @@ export default function PerformanceTab() {
         <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
             <BarChart
-                data={dealsClosed}
+                data={chartData}
                 margin={{ left: -30, right: 0 }}
             >
                 <XAxis

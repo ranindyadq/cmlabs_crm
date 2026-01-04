@@ -77,7 +77,7 @@ model UserWorkInfo {
   roleTitle  String?   @map("role_title") // Jabatan spesifik, misal "Senior Sales"
   location   String? // Ditambahkan sesuai Wireframe Hal 40
   bio        String?   @db.Text // Ditambahkan sesuai Wireframe Hal 40
-  skills     String? // Ditambahkan sesuai Wireframe Hal 40 (Bisa dipisah koma)
+  skills     String[]  @default([])
   joinedAt   DateTime? @map("joined_at") // Tanggal bergabung resmi
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

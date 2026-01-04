@@ -1,0 +1,34 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+export function middleware(request: NextRequest) {
+  // Ambil token dari cookies
+  const token = request.cookies.get("token")?.value;
+  
+  const { pathname } = request.nextUrl;
+
+  // 1. JIKA SUDAH LOGIN (Ada Token) tapi mau akses halaman Auth (Signin/Signup)
+  // -> Tendang ke Dashboard
+  if (token && pathname.startsWith("/auth")) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  // 2. JIKA BELUM LOGIN (Tidak ada Token) tapi mau akses Dashboard/Profile
+  // -> Tendang ke Signin
+  if (!token && (pathname.startsWith("/dashboard") || pathname.startsWith("/profile") || pathname.startsWith("/team"))) {
+    return NextResponse.redirect(new URL("/auth/signin", request.url));
+  }
+
+  return NextResponse.next();
+}
+
+// Tentukan path mana saja yang kena middleware
+export const config = {
+  matcher: [
+    "/dashboard/:path*", 
+    "/profile/:path*",
+    "/team/:path*",
+    "/lead/:path*",
+    "/auth/:path*"
+  ],
+};

@@ -1,24 +1,36 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth-helper";
 import { Parser } from 'json2csv';
 import PDFDocument from 'pdfkit';
 
-// Force Node.js Runtime agar PDFKit & FS berfungsi (PENTING)
 export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
   try {
+    // Cek Login
+    const user = await getSessionUser(req);
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
     const { searchParams } = new URL(req.url);
     const format = searchParams.get('format'); // 'csv' | 'pdf'
     const status = searchParams.get('status');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    const picId = searchParams.get('picId');
+    const picIdParam = searchParams.get('picId');
 
-    // 1. Build Query
+    // Paksa Filter Role
     const where: any = { deletedAt: null };
+    
+    if (user.role === 'ADMIN') {
+      // Admin boleh filter by PIC jika mau
+      if (picIdParam) where.ownerId = picIdParam; 
+    } else {
+      // Sales HANYA boleh lihat datanya sendiri
+      where.ownerId = user.id;
+    }
+
     if (status) where.status = status;
-    if (picId) where.ownerId = picId;
     
     if (startDate && endDate) {
       const dateField = (status === 'WON' || status === 'LOST') ? 'closedAt' : 'createdAt';
@@ -43,13 +55,20 @@ export async function GET(req: Request) {
     // =========================================================
     if (format === 'csv') {
       const fields = [
-        { label: 'Title', value: 'title' },
-        { label: 'Value', value: 'value' },
+        { label: 'Deal Title', value: 'title' },
+        // Pastikan row.value di-cast ke number/string
+        { label: 'Amount', value: (row: any) => row.value }, 
+        
+        // ✅ PERBAIKAN DI SINI:
+        // Tambahkan properti 'value'. Kita isi 'currency' (meski di DB tidak ada).
+        // Karena field 'currency' tidak ditemukan di data, maka 'default: IDR' akan otomatis dipakai.
+        { label: 'Currency', value: 'currency', default: 'IDR' }, 
+        
         { label: 'Status', value: 'status' },
         { label: 'Stage', value: 'stage' },
-        { label: 'Owner', value: 'owner.fullName' },
-        { label: 'Contact', value: 'contact.name' },
-        { label: 'Created At', value: (row: any) => new Date(row.createdAt).toLocaleDateString('id-ID') }
+        { label: 'Owner Name', value: 'owner.fullName' },
+        { label: 'Company', value: 'company.name', default: '-' },
+        { label: 'Created Date', value: (row: any) => new Date(row.createdAt).toISOString().split('T')[0] }
       ];
       
       const parser = new Parser({ fields });
@@ -67,67 +86,116 @@ export async function GET(req: Request) {
     // EXPORT PDF
     // =========================================================
     if (format === 'pdf') {
-      // Kita gunakan Buffer untuk menampung PDF di memori sebelum dikirim
-      const chunks: any[] = []; // ✅ FIX: Tambahkan tipe 'any[]' atau 'Buffer[]'
-      const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    const chunks: any[] = [];
+    // Margin atas lebih besar untuk Header
+    const doc = new PDFDocument({ margin: 40, size: 'A4', bufferPages: true });
 
-      // ✅ FIX: Tambahkan tipe '(chunk: any)' untuk menghindari error implicit any
-      doc.on('data', (chunk: any) => chunks.push(chunk));
-      
-      // Promise agar PDF selesai digenerate sebelum response dikirim
-      const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+    doc.on('data', (chunk: any) => chunks.push(chunk));
+
+    const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
 
-        // --- PDF CONTENT GENERATION ---
-        
-        // 1. Header
-        doc.fontSize(18).text('CRM Executive Report', { align: 'center' });
-        doc.moveDown();
-        doc.fontSize(10).text(`Generated Date: ${new Date().toLocaleString('id-ID')}`, { align: 'center' });
-        doc.moveDown();
+        // --- 1. HEADER SECTION ---
+        // Garis Aksen Ungu di paling atas
+        doc.rect(0, 0, 595.28, 10).fill('#5A4FB5'); // Lebar A4 full
 
-        // 2. Summary Simple
+        // Logo (Pastikan path file benar, jika error hapus baris ini)
+        // doc.image('public/logo.png', 40, 40, { width: 40 });
+
+        // Judul Laporan
+        doc.moveDown(2);
+        doc.fillColor('#333333').font('Helvetica-Bold').fontSize(20)
+           .text('Quarterly Evaluation Report', 40, 50, { align: 'left' });
+
+        // Metadata Laporan (Kanan Atas)
+        doc.fontSize(10).font('Helvetica')
+           .text(`Generated: ${new Date().toLocaleDateString('id-ID')}`, 400, 50, { align: 'right' })
+           .text(`Period: Q3 2025`, 400, 65, { align: 'right' })
+           .text(`PIC: Admin`, 400, 80, { align: 'right' });
+
+        // Garis Pembatas
+        doc.moveTo(40, 100).lineTo(555, 100).lineWidth(0.5).strokeColor('#E0E0E0').stroke();
+
+        // --- 2. SUMMARY CARDS (Kotak Ringkasan) ---
         const totalValue = leads.reduce((acc, curr) => acc + Number(curr.value), 0);
-        doc.fontSize(12).text(`Total Leads: ${leads.length}`);
-        doc.text(`Total Value: IDR ${totalValue.toLocaleString('id-ID')}`);
-        doc.moveDown();
+        const totalWon = leads.filter(l => l.status === 'WON').length;
+        
+        // Fungsi Helper Gambar Kartu
+        const drawCard = (x: number, title: string, value: string, color: string) => {
+            // Background Card
+            doc.roundedRect(x, 120, 120, 60, 5).fillAndStroke('#F9FAFB', '#E5E7EB');
+            // Title
+            doc.fillColor('#666666').fontSize(8).font('Helvetica').text(title, x + 10, 130);
+            // Value
+            doc.fillColor(color).fontSize(14).font('Helvetica-Bold').text(value, x + 10, 150);
+        };
 
-        // 3. Table Headers
-        const tableTop = 200;
-        let y = tableTop;
+        drawCard(40, 'TOTAL REVENUE', `IDR ${totalValue.toLocaleString('id-ID')}`, '#5A4FB5'); // Ungu
+        drawCard(170, 'TOTAL LEADS', leads.length.toString(), '#333333');
+        drawCard(300, 'DEALS WON', totalWon.toString(), '#257047'); // Hijau
+        drawCard(430, 'AVG DEAL SIZE', `IDR ${(leads.length > 0 ? totalValue/leads.length : 0).toLocaleString('id-ID')}`, '#333333');
+
+        // --- 3. TABEL DATA ---
+        let y = 210; // Start Y Tabel
         
-        doc.font('Helvetica-Bold').fontSize(9);
-        doc.text('Title', 50, y);
-        doc.text('Status', 250, y);
-        doc.text('Owner', 350, y);
-        doc.text('Value (IDR)', 450, y, { align: 'right' });
+        // Header Tabel
+        doc.rect(40, y, 515, 25).fill('#5A4FB5'); // Header Ungu Solid
+        doc.fillColor('#FFFFFF').fontSize(9).font('Helvetica-Bold');
         
-        doc.moveTo(50, y + 15).lineTo(550, y + 15).stroke();
+        doc.text('DEAL TITLE', 50, y + 8);
+        doc.text('OWNER', 220, y + 8);
+        doc.text('STATUS', 320, y + 8, { width: 60, align: 'center' });
+        doc.text('VALUE (IDR)', 400, y + 8, { width: 140, align: 'right' });
+
         y += 25;
 
-        // 4. Data Rows
+        // Loop Data
         doc.font('Helvetica').fontSize(9);
         
-        leads.forEach((lead) => {
-          // Add Page if needed
-          if (y > 750) {
-            doc.addPage();
-            y = 50;
-          }
+        leads.forEach((lead, i) => {
+            // Cek Halaman Baru
+            if (y > 750) {
+                doc.addPage();
+                y = 50; 
+                // Gambar ulang header tabel di halaman baru (opsional)
+            }
 
-          doc.text(lead.title.substring(0, 30), 50, y);
-          doc.text(lead.status, 250, y);
-          doc.text(lead.owner?.fullName || '-', 350, y);
-          doc.text(Number(lead.value).toLocaleString('id-ID'), 450, y, { align: 'right' });
-          
-          y += 20;
+            // Zebra Striping (Baris Genap dikasih background abu)
+            if (i % 2 === 0) {
+                doc.rect(40, y, 515, 20).fill('#F3F4F6');
+            }
+
+            // Warna Status (Semantic Colors)
+            let statusColor = '#333333';
+            if (lead.status === 'WON') statusColor = '#257047'; // Hijau
+            else if (lead.status === 'LOST') statusColor = '#C11106'; // Merah
+            else statusColor = '#FFAB00'; // Kuning/Warning
+
+            // Isi Data
+            doc.fillColor('#333333').text(lead.title.substring(0, 30), 50, y + 6);
+            doc.text(lead.owner?.fullName || '-', 220, y + 6);
+            
+            doc.fillColor(statusColor).font('Helvetica-Bold')
+               .text(lead.status, 320, y + 6, { width: 60, align: 'center' });
+            
+            doc.font('Helvetica').fillColor('#333333')
+               .text(Number(lead.value).toLocaleString('id-ID'), 400, y + 6, { width: 140, align: 'right' });
+
+            y += 20; // Tinggi baris
         });
 
-        doc.end();
-      });
+        // Footer Numbering
+        const range = doc.bufferedPageRange();
+        for (let i = range.start; i < range.start + range.count; i++) {
+            doc.switchToPage(i);
+            doc.fontSize(8).fillColor('#AAAAAA')
+               .text(`Page ${i + 1} of ${range.count} | Confidential cmlabs CRM`, 40, 800, { align: 'center' });
+        }
 
-      // ✅ FIX: Casting 'pdfBuffer as any' karena definisi tipe NextResponse agak strict
+        doc.end();
+    });
+
       return new NextResponse(pdfBuffer as any, {
         headers: {
           'Content-Type': 'application/pdf',

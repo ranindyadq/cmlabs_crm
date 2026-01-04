@@ -59,6 +59,19 @@ export async function GET(req: Request) {
     const skip = (page - 1) * limit;
 
     const whereCondition = buildLeadWhereCondition(searchParams);
+    const baseWhere: any = { 
+            deletedAt: null,
+        };
+
+    // Asumsi: getSessionUser mengembalikan role name (misal: "SALES", "ADMIN")
+        // Jika user adalah SALES, PAKSA filter hanya milik dia sendiri
+        if (user.role === 'SALES') {
+            baseWhere.ownerId = user.id; 
+        } else {
+            // Jika Admin/Owner, baru boleh pakai filter dari URL
+            const picId = searchParams.get('picId');
+            if (picId) baseWhere.ownerId = picId;
+        }
 
     const [leads, totalLeads] = await prisma.$transaction([
       prisma.lead.findMany({

@@ -12,7 +12,7 @@ import { Plus, Trash2, Calendar, FileText, Edit, ImageIcon } from "lucide-react"
     setShowForm  // Tambahkan ini
   }: { 
     leadId: string; 
-    onRefresh: () => void;
+    onRefresh?: () => void;
     showForm: boolean;      // Tambahkan tipe
     setShowForm: (val: boolean) => void; // Tambahkan tipe
   }) {
@@ -31,7 +31,7 @@ import { Plus, Trash2, Calendar, FileText, Edit, ImageIcon } from "lucide-react"
 
   const fetchNotes = async () => {
     try {
-      onRefresh();
+      onRefresh?.();
       setLoading(true);
       const res = await apiClient.get(`/leads/${leadId}?activity_type=NOTE`);
       setNotes(res.data.data.notes || []);

@@ -29,6 +29,26 @@ const updateProfileSchema = z.object({
 // ==========================================
 // 2. LOGIC ENDPOINT
 // ==========================================
+export async function GET(req: Request) {
+  const user = await getSessionUser(req);
+  if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+  try {
+    const userData = await prisma.user.findUnique({
+      where: { id: user.id },
+      include: { 
+        workInfo: true // Pastikan ini 'userWorkInfo' sesuai schema Prisma kamu
+      },
+    });
+
+    if (!userData) return NextResponse.json({ message: "User not found" }, { status: 404 });
+
+    return NextResponse.json({ data: userData });
+  } catch (error) {
+    console.error("Get profile error:", error);
+    return NextResponse.json({ message: "Internal Error" }, { status: 500 });
+  }
+}
 
 export async function PATCH(req: Request) {
   const user = await getSessionUser(req);

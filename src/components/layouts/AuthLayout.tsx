@@ -38,7 +38,8 @@ export default function AuthLayout({
           bg-white dark:bg-[#1E1E1E]
           rounded-3xl shadow-lg overflow-hidden relative
           flex-col md:flex-row
-          h-auto md:h-[85vh]
+          min-h-[550px] 
+          h-auto
         `}
         style={{ backgroundColor: isDark ? "#3B3285" : "white" }}
       >
@@ -66,7 +67,7 @@ export default function AuthLayout({
 
         {reverse ? (
           <>
-            <BrandingBlock className="w-full md:w-1/2 h-32 md:h-full" isAuthPage={isAuthPage} />
+            <BrandingBlock className="w-full md:w-1/2 self-stretch" isAuthPage={isAuthPage} />
             <div className="w-full md:w-1/2 h-full p-6 md:p-12 flex flex-col justify-center">
               {children}
             </div>
@@ -76,7 +77,7 @@ export default function AuthLayout({
             <div className="w-full md:w-1/2 h-full p-6 md:p-12 flex flex-col justify-center order-2 md:order-1">
               {children}
             </div>
-            <BrandingBlock className="w-full md:w-1/2 h-32 md:h-full order-1 md:order-2" isAuthPage={isAuthPage} />
+            <BrandingBlock className="w-full md:w-1/2 self-stretch order-1 md:order-2" isAuthPage={isAuthPage} />
           </>
         )}
       </div>
@@ -101,7 +102,7 @@ function BrandingBlock({
       />
 
       {/* Konten */}
-      <div className="relative z-10 flex flex-col h-full p-6 text-white">
+      <div className="relative z-10 flex flex-col h-full min-h-full p-6 text-white">
         {/* Logo */}
         <div className="flex justify-start md:justify-end mb-autoshrink-0 mb-4 md:mb-auto">
           <div
@@ -125,7 +126,7 @@ function BrandingBlock({
 
         {/* Kalau halaman SignIn/SignUp → tampil lengkap */}
         {isAuthPage && (
-          <div className="flex flex-col justify-center items-center text-center">
+          <div className="flex-grow flex flex-col justify-center items-center text-center">
             <h1
               suppressHydrationWarning
               className="text-3xl font-bold bg-gradient-to-r from-[#FFFFFF] to-[#C7F500] bg-clip-text text-transparent mb-7"
@@ -142,7 +143,7 @@ function BrandingBlock({
         )}
 
         {/* Spacer */}
-        <div className="hidden md:block mt-auto"></div>
+        <div className="mt-auto h-8"></div>
       </div>
     </div>
   );

@@ -10,7 +10,8 @@ interface InputWithLabelProps {
   name?: string;
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  required?: boolean; // ✅ Tambahkan ini
+  required?: boolean;
+  isError?: boolean;
 }
 
 export default function InputWithLabel({
@@ -20,7 +21,8 @@ export default function InputWithLabel({
   name,
   value,
   onChange,
-  required = false, // ✅ Default false
+  required = false,
+  isError = false, 
 }: InputWithLabelProps) {
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = type === "password";
@@ -46,11 +48,14 @@ export default function InputWithLabel({
         placeholder={placeholder}
         value={value}
         onChange={onChange}
-        required={required} // ✅ Pasangkan di sini
+        required={required} 
         className={`w-full border border-gray-300 rounded-lg px-3 py-1.5  text-sm placeholder:text-xs 
-    focus:ring-2 focus:ring-[#5A4FB5] focus:border-[#5A4FB5] focus:outline-none 
-    transition duration-200 ease-in-out ${
-          isDark
+    focus:ring-2 focus:outline-none transition duration-200 ease-in-out 
+    ${ isError
+            ? "border-red-500 focus:border-red-500 focus:ring-red-200" 
+            : "border-gray-300 focus:border-[#5A4FB5] focus:ring-[#5A4FB5]"
+        }
+    ${ isDark
         ? "bg-[#4C4790] text-white placeholder-[#D1CCF1]"
         : "bg-white text-black placeholder-gray-400"
         }`}

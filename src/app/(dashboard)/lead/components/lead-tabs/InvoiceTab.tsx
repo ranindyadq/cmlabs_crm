@@ -10,7 +10,7 @@ export default function InvoiceTab({  leadId,
   onRefresh 
 }: { 
   leadId: string; 
-  onRefresh: () => void 
+  onRefresh?: () => void; 
 }) {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,7 +28,7 @@ export default function InvoiceTab({  leadId,
   // 1. FETCH INVOICES
   const fetchInvoices = async () => {
     try {
-      onRefresh();
+      onRefresh?.();
       setLoading(true);
       const res = await apiClient.get(`/leads/${leadId}?activity_type=INVOICE`);
       setInvoices(res.data.data.invoices || []);
