@@ -114,13 +114,16 @@ export default function EditDeleteModals({
           department: dept,
           roleTitle: role, // Sesuaikan dengan field workInfo
           bio: desc,
+          location,
+          skills,
+          joinedAt: selectedDate,
         }),
       });
 
       if (res.ok) {
         toast.success("Data berhasil diperbarui");
         onCloseEdit();
-        window.location.reload(); // Refresh untuk melihat perubahan
+        router.refresh(); // Refresh untuk melihat perubahan
       }
     } catch (error) {
       toast.error("Gagal memperbarui data");
@@ -209,9 +212,9 @@ export default function EditDeleteModals({
                 className="w-full border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
               >
                 <option value="">Select Role</option>
-                <option>Admin</option>
-                <option>Sales</option>
-                <option>Viewer</option>
+                <option value="ADMIN">Admin</option>  {/* Value harus UPPERCASE */}
+                <option value="SALES">Sales</option>  {/* Agar cocok dengan logic backend */}
+                <option value="VIEWER">Viewer</option>
               </select>
             </div>
 

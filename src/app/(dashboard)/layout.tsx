@@ -54,19 +54,67 @@ function DashboardContent({ children }: { children: ReactNode }) {
 
   // 2. FETCH DATA USER DARI LOCALSTORAGE SAAT MOUNT
   useEffect(() => {
-    const userData = getUser();
-    if (userData) {
-      try {
-        const parsedUser = JSON.parse(userData);
-        setUser({
-          name: parsedUser.name || parsedUser.fullName || "User",
-          email: parsedUser.email || "user@cmlabs.co",
-          role: parsedUser.role || ""
-        });
-      } catch (e) {
-        console.error("Gagal parse user data");
-      }
-    }
+    const loadUserData = async () => {
+        // A. Cek Data Lokal dulu (Optimistic UI)
+        // Helper getUser() Anda sudah benar (cek local || session)
+        const localData = getUser(); 
+        
+        if (localData) {
+            try {
+                const parsed = JSON.parse(localData);
+                setUser({
+                    name: parsed.name || parsed.fullName || "User",
+                    email: parsed.email || "user@cmlabs.co",
+                    role: parsed.role || ""
+                });
+            } catch (e) { console.error("Parse error", e); }
+        }
+
+        // B. Ambil Data Terbaru dari Server
+        try {
+            const token = getToken(); // Helper getToken() Anda sudah benar
+            if (token) {
+                const res = await apiClient.get("/profile");
+                const apiUser = res.data.data;
+
+                // Bersihkan object role jika perlu
+                const roleName = typeof apiUser.role === 'object' && apiUser.role !== null 
+                    ? apiUser.role.name 
+                    : apiUser.role;
+
+                // Update State UI
+                setUser({
+                    name: apiUser.fullName || "User",
+                    email: apiUser.email || "user@cmlabs.co",
+                    role: roleName || ""
+                });
+
+                // Siapkan data untuk disimpan
+                const storageData = {
+                    ...apiUser,
+                    role: roleName
+                };
+
+                // ✅ PERBAIKAN UTAMA DI SINI (LOGIKA PENYIMPANAN CERDAS)
+                // Cek: Tokennya ada di mana? Local atau Session?
+                // Kita simpan update user di tempat yang sama dengan tokennya.
+                if (localStorage.getItem("token")) {
+                    localStorage.setItem("user", JSON.stringify(storageData));
+                } else {
+                    // Jika token di session (atau tidak ada di local), simpan ke session
+                    sessionStorage.setItem("user", JSON.stringify(storageData));
+                }
+            }
+        } catch (error) {
+            console.error("Gagal load data user terbaru", error);
+            // Jika token expired (401), bisa tambahkan logic redirect login disini
+        }
+    };
+
+    loadUserData();
+
+    window.addEventListener("user-updated", loadUserData);
+    return () => window.removeEventListener("user-updated", loadUserData);
   }, []);
   
   // Sidebar Context
@@ -231,10 +279,10 @@ function DashboardContent({ children }: { children: ReactNode }) {
 
           {/* === NAVIGATION === */}
           <nav className="flex flex-col gap-2">
-            {navItems.map((item) => {
+            {filteredNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname.startsWith(item.href);
-              
+
               return (
                 <Link
                   key={item.name}
@@ -247,14 +295,9 @@ function DashboardContent({ children }: { children: ReactNode }) {
                       : "hover:bg-gray-50 text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-black"
                     }
                   `}
-                  title={!isSidebarOpen ? item.name : ""} // Tooltip saat tutup
+                  title={!isSidebarOpen ? item.name : ""}
                 >
-                  <Icon 
-                    size={20} 
-                    className={`${isActive ? "text-[#5A4FB5]" : "text-black dark:text-white"}`} 
-                  />
-                  
-                  {/* Sembunyikan Nama Menu jika Sidebar Tutup */}
+                  <Icon size={20} />
                   {isSidebarOpen && <span>{item.name}</span>}
                 </Link>
               );

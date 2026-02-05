@@ -21,7 +21,6 @@ export default function EmailTab({  leadId,
 
   const fetchEmails = async () => {
     try {
-      onRefresh?.();
       setLoading(true);
       const res = await apiClient.get(`/leads/${leadId}?activity_type=EMAIL`);
       setEmails(res.data.data.emails || []);
@@ -41,6 +40,7 @@ export default function EmailTab({  leadId,
       });
       setShowPopup(false);
       fetchEmails();
+      onRefresh?.();
     } catch (err) { alert("Gagal log email"); }
   };
 

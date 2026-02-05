@@ -9,25 +9,20 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
-    // 1. Cek Token di LocalStorage
-    const token = localStorage.getItem("token");
+    // 🔍 CEK DI KEDUA SAKU
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
 
     if (!token) {
-      // 2. Jika tidak ada, tendang ke login
+      // Kosong melompong -> Usir
       router.replace("/auth/signin");
     } else {
-      // 3. Jika ada, izinkan masuk
+      // Ada tiket -> Silakan masuk
       setIsAuthorized(true);
     }
   }, [router]);
 
-  // Tampilkan Loading selama pengecekan berlangsung
   if (!isAuthorized) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-gray-900">
-        <Loader2 className="w-8 h-8 text-[#5A4FB5] animate-spin" />
-      </div>
-    );
+    return null; // Atau return loading spinner
   }
 
   // Render halaman asli jika lolos

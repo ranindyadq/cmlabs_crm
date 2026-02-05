@@ -16,8 +16,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
     if (!existingCall) return NextResponse.json({ message: "Call not found" }, { status: 404 });
 
-    // Optional: Add strict ownership check here if needed
-    // if (user.role !== 'ADMIN' && existingCall.userId !== user.id) ...
+    if (user.role !== 'ADMIN' && existingCall.userId !== user.id) {
+        return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
 
     const body = await req.json();
     

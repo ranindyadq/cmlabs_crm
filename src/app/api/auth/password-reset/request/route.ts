@@ -35,7 +35,7 @@ export async function POST(req: Request) {
     const user = await prisma.user.findUnique({ where: { email } });
 
     // LOGIKA LAMA: Anti-Enumeration (Return 200 meski user ga ada)
-    if (!user || user.status === 'PENDING') {
+    if (!user) {
       return NextResponse.json({ message: 'Jika email terdaftar, link reset telah dikirim.' }, { status: 200 });
     }
 

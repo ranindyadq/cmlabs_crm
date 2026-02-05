@@ -21,6 +21,7 @@ const buildLeadInclude = (searchParams: URLSearchParams) => {
     calls: { notes: searchCondition },
     emails: { OR: [{ subject: searchCondition }, { body: searchCondition }] },
     invoices: { invoiceNumber: searchCondition },
+    activities: { description: searchCondition },
   };
 
   // Default Include (Owner, Contact, Company, Labels, Followers)
@@ -62,6 +63,8 @@ const buildLeadInclude = (searchParams: URLSearchParams) => {
   if (!activity_type || activity_type === 'INVOICE') {
     includeCondition.invoices = { where: activityWhere.invoices, orderBy: { invoiceDate: 'desc' } };
   }
+
+  
 
   return includeCondition;
 };
@@ -177,6 +180,79 @@ export async function PATCH(
     delete updateData.createdAt;
     delete updateData.deletedAt;
 
+    // MULAI LOGIKA RELASI] ---
+    // Logika untuk Company (Karena name @unique, pakai connectOrCreate)
+    if (body.company_name) {
+      updateData.company = {
+        connectOrCreate: {
+          where: { name: body.company_name },
+          create: { name: body.company_name },
+        },
+      };
+    } else if (body.company_name === "") {
+      updateData.company = { disconnect: true };
+    }
+    // Hapus properti string agar tidak error di prisma update
+    delete updateData.company_name;
+
+    // Logika untuk Contact (Karena name TIDAK @unique, pakai Manual Check)
+    if (body.contact_name) {
+      // Cek dulu apakah kontak sudah ada
+      const existingContact = await prisma.contact.findFirst({
+        where: { name: body.contact_name },
+      });
+
+      if (existingContact) {
+        updateData.contact = { connect: { id: existingContact.id } };
+      } else {
+        updateData.contact = { create: { name: body.contact_name } };
+      }
+    } else if (body.contact_name === "") {
+      updateData.contact = { disconnect: true };
+    }
+    // Hapus properti string agar tidak error di prisma update
+    delete updateData.contact_name;
+
+    // Kita cek apakah frontend mengirim array string label, misal: ["VIP", "Urgent"]
+    let labelOperations: any[] = [];
+    
+    if (body.labels && Array.isArray(body.labels)) {
+        // 1. Hapus semua label yang nempel di Lead ini sebelumnya (Reset)
+        labelOperations.push(
+            prisma.leadLabel.deleteMany({
+                where: { leadId: id }
+            })
+        );
+
+        // 2. Loop setiap nama label untuk dipasang ulang
+        for (const labelName of body.labels) {
+            // Bersihkan spasi
+            const cleanName = labelName.trim();
+            if(!cleanName) continue;
+
+            // Masukkan operasi ke antrian transaction
+            // Logikanya: Cari Labelnya (atau buat baru), lalu sambungkan via LeadLabel
+            labelOperations.push(
+                 prisma.leadLabel.create({
+                    data: {
+                        lead: { connect: { id } },
+                        label: {
+                            connectOrCreate: {
+                                where: { name: cleanName },
+                                create: { 
+                                    name: cleanName,
+                                    colorHex: "#6366f1" // Default warna (bisa diubah random)
+                                }
+                            }
+                        }
+                    }
+                 })
+            );
+        }
+    }
+    // Hapus properti labels dari updateData agar tidak error di prisma.lead.update utama
+    delete updateData.labels;
+
     // Logika Otomatis Closed Date
     if (updateData.status) {
       if (['WON', 'LOST'].includes(updateData.status)) {
@@ -186,22 +262,37 @@ export async function PATCH(
       }
     }
 
-    // [OPSIONAL] Pastikan Value aman untuk Decimal (jika dikirim string/number)
-    // Prisma biasanya pintar menangani ini, tapi ini untuk jaga-jaga
+    // [OPSIONAL] Pastikan Value aman untuk Decimal
     if (updateData.value !== undefined) {
         updateData.value = Number(updateData.value);
     }
 
     // 5. Update DB & 🔥 Create Audit Log (Gunakan Transaction)
+    // Kita gabungkan update lead dengan operasi label
     const [updatedLead] = await prisma.$transaction([
-        // A. Update Lead
+        // A. Update data Lead utama
         prisma.lead.update({
             where: { id },
             data: updateData,
+            include: {
+                company: true,
+                contact: true,
+                // Include labels agar data balik ke frontend lengkap
+                // Perhatikan struktur: Lead -> LeadLabel -> Label
+                labels: {
+                    include: {
+                        label: true 
+                    }
+                }
+            }
         }),
-        // B. Catat History jika Stage berubah
+
+        // B. Eksekusi Operasi Label (Delete Many & Create Many)
+        ...labelOperations,
+
+        // C. Audit Logs
         ...(body.stage && body.stage !== oldStage ? [
-            prisma.auditLog.create({
+             prisma.auditLog.create({
                 data: {
                     actionType: "CHANGE_STAGE",
                     entityType: "LEAD",

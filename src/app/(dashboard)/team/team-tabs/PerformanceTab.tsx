@@ -221,8 +221,8 @@ export default function PerformanceTab({ memberId }: { memberId: string }) {
                 labelStyle={{ color: "#111827" }}
                 />
                 <Bar
-                dataKey="value"
-                fill="#facc15"
+                dataKey="dealsCount"
+                fill="#C7E800"
                 radius={[6, 6, 0, 0]}
                 />
             </BarChart>

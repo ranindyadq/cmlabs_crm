@@ -39,21 +39,19 @@ apiClient.interceptors.response.use(
   (error) => {
     const status = error.response ? error.response.status : null;
     
-    // Logika Kritis: Jika status 401 atau 403 (Akses Ditolak/Token Expired)
-    if (status === 401 || status === 403) {
-      console.warn("Sesi berakhir atau akses ditolak. Mengarahkan ke login...");
+    // --- CCTV DEBUGGING ---
+    console.log("🚨 API ERROR TERDETEKSI:", status, error.config.url);
+
+    if (status === 401) {
+      console.warn("💀 Sesi berakhir (401). Menghapus Storage...");
       
-      // Hapus token yang busuk dari penyimpanan
-      localStorage.clear();
-      sessionStorage.clear();
+      // Coba comment dulu baris penghapusan ini untuk mengetes
+      // localStorage.clear();  <-- JANGAN DIHAPUS DULU
+      // sessionStorage.clear(); <-- JANGAN DIHAPUS DULU
       
-      // Arahkan ke halaman login
-      // Karena ini bukan komponen React, kita gunakan window.location
-      if (typeof window !== 'undefined' && window.location.pathname !== '/auth/signin') {
-        window.location.href = '/auth/signin';
-      }
+      // window.location.href = '/auth/signin';
     }
-    
+    // ...
     return Promise.reject(error);
   }
 );

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth-helper";
-import { put } from "@vercel/blob"; // 🔥 Import Vercel Blob
+import { writeFile, mkdir } from "fs/promises";
+import path from "path";
 
 export async function POST(req: Request) {
   try {
@@ -13,39 +14,53 @@ export async function POST(req: Request) {
 
     // 2. Ambil File dari Form Data
     const formData = await req.formData();
-    const file = formData.get("photo") as File;
+    // PENTING: Kita sepakati key-nya adalah "file" (sesuai frontend sebelumnya)
+    const file = formData.get("file") as File; 
 
     if (!file) {
-      return NextResponse.json({ message: "File foto tidak ditemukan." }, { status: 400 });
+      return NextResponse.json({ message: "File tidak ditemukan." }, { status: 400 });
     }
 
-    // 3. Validasi Tipe File (Keamanan)
-    const validTypes = ["image/jpeg", "image/png", "image/webp"];
+    // 3. Validasi Tipe File
+    const validTypes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
     if (!validTypes.includes(file.type)) {
-       return NextResponse.json({ message: "Format file harus JPG, PNG, atau WEBP." }, { status: 400 });
+       return NextResponse.json({ message: "Format file harus JPG/PNG." }, { status: 400 });
     }
 
-    // --- BAGIAN INI BERUBAH UNTUK VERCEL ---
-    
+    // 4. Validasi Ukuran (Max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      return NextResponse.json({ message: "File terlalu besar (Max 2MB)" }, { status: 400 });
+    }
+
+    // 5. Persiapkan Folder Upload (Localhost)
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+
     // Buat nama file unik
-    const ext = file.name.split(".").pop();
-    const filename = `user-${user.id}-${Date.now()}.${ext}`;
+    const fileExt = file.name.split(".").pop();
+    const fileName = `avatar-${user.id}-${Date.now()}.${fileExt}`;
+    
+    // Pastikan folder public/uploads ada
+    const uploadDir = path.join(process.cwd(), "public", "uploads");
+    await mkdir(uploadDir, { recursive: true }); // Buat folder jika belum ada
 
-    // 4. Upload ke Vercel Blob (Cloud Storage)
-    const blob = await put(filename, file, {
-      access: 'public', // Agar bisa dilihat di frontend
-    });
+    const filePath = path.join(uploadDir, fileName);
+    
+    // 6. Tulis File ke Folder
+    await writeFile(filePath, buffer);
 
-    // 5. Update URL di Database
-    // Vercel Blob akan mengembalikan URL lengkap (https://...)
-    const updatedUser = await prisma.user.update({
+    // 7. Simpan URL ke Database
+    // URL publik adalah /uploads/namafile
+    const fileUrl = `/uploads/${fileName}`;
+
+    await prisma.user.update({
       where: { id: user.id },
-      data: { photo: blob.url }, 
+      data: { photo: fileUrl },
     });
 
     return NextResponse.json({
-      message: "Foto profil berhasil diperbarui.",
-      photoUrl: updatedUser.photo, // URL dari cloud
+      message: "Foto berhasil diupload",
+      data: { url: fileUrl }, // Return URL agar frontend bisa langsung update state
     });
 
   } catch (error) {

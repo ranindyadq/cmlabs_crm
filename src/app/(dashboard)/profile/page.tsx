@@ -9,194 +9,303 @@ import {
   Lock,
   Bell,
   Building,
+  Loader2,
+  Camera,
 } from "lucide-react";
 
 import ProfileTab from "./profile-tabs/ProfileTab";
 import AccountTab from "./profile-tabs/AccountTab";
 import NotificationTab from "./profile-tabs/NotificationTab";
 import OrganizationTab from "./profile-tabs/OrganizationTab";
+import Image from "next/image";
+import { useRef } from "react";
+
+interface UserData {
+  id: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  role: string | { id: string; name: string };
+  status: string;
+  workInfo?: {
+    location?: string;
+    bio?: string;
+    skills?: string[];
+  };
+  photo?: string | null;
+}
 
 export default function ProfilePage() {
-  const [userRole, setUserRole] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert("File terlalu besar (Maks 2MB)"); // Bisa ganti toast.error
+      return;
+    }
+
+    try {
+      setIsUploading(true); // Pastikan state loading nyala
+      
+      const formData = new FormData();
+      // PENTING: Key harus "file" agar cocok dengan Backend di atas
+      formData.append("file", file); 
+
+      // PENTING: URL Fetch ke /api/profile/photo
+      const res = await fetch("/api/profile/photo", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await res.json(); // Baca response backend
+
+      if (res.ok) {
+        // SUKSES
+        // Kita update state userData secara manual agar UI langsung berubah tanpa refresh halaman
+        if (userData && json.data?.url) {
+            setUserData({
+                ...userData,
+                photo: json.data.url
+            });
+        }
+        // Atau panggil fetchProfile() untuk memuat ulang dari server
+        // fetchProfile(); 
+      } else {
+        alert(json.message || "Gagal mengupload foto");
+      }
+      
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Terjadi kesalahan sistem");
+    } finally {
+      setIsUploading(false); // Matikan loading
+    }
+  };
+  
+  const [userData, setUserData] = useState<UserData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchProfile = async () => {
+    try {
+      const res = await fetch("/api/profile"); // Panggil Backend kamu
+      if (res.ok) {
+        const json = await res.json();
+        setUserData(json.data);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // Ambil data user dari localStorage
-    const userData = localStorage.getItem("user");
-    if (userData) {
-      const parsed = JSON.parse(userData);
-      setUserRole(parsed.role); // 'ADMIN' atau 'USER'
-    }
+    fetchProfile();
   }, []);
 
   const [activeTab, setActiveTab] = useState<"profile" | "account" | "notifications" | "organization">("profile");
-    
+  
+  const getRoleName = (): string => {
+    if (!userData) return "";
+    // Jika role adalah object, ambil .name, jika string ambil langsung
+    if (typeof userData.role === 'object' && userData.role !== null) {
+      return userData.role.name;
+    }
+    return userData.role || "";
+  };
+
+  if (isLoading) {
+    return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-[#5A4FB5]" /></div>;
+  }
+  
+  // Pastikan data ada sebelum render
+  if (!userData) return null;
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="min-h-screen bg-gray-50 pb-10">
 
-      {/* TITLE + GRADIENT */}
-      <div className="relative w-full mb-4">
-        <div className="bg-[#5A4FB5] text-white py-6 px-8 rounded-t-2xl">
-          <h1 className="text-xl font-semibold">Profile</h1>
+      {/* 1. HEADER JUDUL (Putih, Terpisah di Atas) */}
+      <div className="bg-[#5A4FB5] border-b border-gray-200 px-7 py-4">
+        <div className="max-w-6xl mx-auto">
+          <h1 className="text-xl text-white font-semibold">Profile</h1>
           <p className="text-sm text-white mt-1">
             Manage your account settings and preferences
           </p>
         </div>
-
-        <div className="w-full overflow-hidden leading-none">
-          <svg
-            className="w-full h-[78px] block"
-            viewBox="0 0 1440 78"
-            preserveAspectRatio="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <defs>
-              <linearGradient id="purpleBlock" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stopColor="#5A4FB5" />
-                <stop offset="100%" stopColor="#CAA9FF" />
-              </linearGradient>
-
-              <filter id="limeSoftGlow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="4" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-
-            <rect width="1440" height="130" fill="url(#purpleBlock)" />
-
-            <path d="M0,12 C220,35 480,-5 720,18 C980,42 1200,-2 1440,15"
-              stroke="#D9FF6A" strokeWidth="2.6" fill="none" opacity="0.95" filter="url(#limeSoftGlow)" />
-            <path d="M0,25 C260,55 480,5 720,32 C960,60 1200,10 1440,28"
-              stroke="#D9FF6A" strokeWidth="2.5" fill="none" opacity="0.85" filter="url(#limeSoftGlow)" />
-            <path d="M0,38 C280,70 480,20 720,45 C960,72 1180,25 1440,42"
-              stroke="#D9FF6A" strokeWidth="2.4" fill="none" opacity="0.78" filter="url(#limeSoftGlow)" />
-            <path d="M0,50 C240,82 480,32 720,58 C960,85 1200,40 1440,55"
-              stroke="#D9FF6A" strokeWidth="2.3" fill="none" opacity="0.7" filter="url(#limeSoftGlow)" />
-          </svg>
-        </div>
+      </div>
+      
+      {/* 1. COVER IMAGE AREA (Abu-abu di atas) */}
+      <div className="h-40 w-full bg-gradient-to-r from-gray-300 to-gray-400 relative">
       </div>
 
-      {/* MAIN GRID */}
-      <div className="grid grid-cols-3 gap-5 items-start flex-1 h-full">
+      {/* 2. MAIN CONTAINER (Menumpuk di atas cover) */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 -mt-20 relative z-10">
+        
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col md:flex-row min-h-[600px]">
+          
+          {/* === LEFT SIDEBAR (Profile Summary) === */}
+          <aside className="w-full md:w-80 border-b md:border-r border-gray-200 p-6 flex flex-col items-center text-center">
+            
+            {/* Avatar (Floating Up) */}
+            <div className="-mt-16 mb-4 relative">
+              <div className="w-32 h-32 rounded-full border-4 border-white bg-gray-200 shadow-md flex items-center justify-center overflow-hidden relative">
+          
+                {/* LOGIKA TAMPILAN FOTO */}
+                {userData.photo ? (
+                  <Image 
+                    src={userData.photo} 
+                    alt={userData.fullName}
+                    fill // Agar gambar memenuhi lingkaran
+                    className="object-cover"
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  />
+                ) : (
+                  // Default jika tidak ada foto
+                  <User size={64} className="text-gray-400" />
+                )}
 
-        {/* LEFT CARD */}
-        <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-6 h-fit">
-          <div className="flex flex-col items-center">
-            <div className="w-28 h-28 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center shadow">
-              <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-300 flex items-center justify-center">
-                <User size={48} className="text-gray-500" />
+                {/* Loading Overlay saat upload */}
+                {isUploading && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+                    <Loader2 className="animate-spin text-white" />
+                  </div>
+                )}
+              </div>
+
+              {/* Tombol Edit / Kamera */}
+              <button 
+                onClick={handleAvatarClick}
+                className="absolute bottom-0 right-0 bg-white hover:bg-gray-100 p-2 rounded-full border border-gray-200 shadow-sm transition text-gray-600 cursor-pointer z-20"
+                title="Change Profile Photo"
+              >
+                <Camera size={18} />
+              </button>
+
+              {/* Input File Tersembunyi (Invisible) */}
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                accept="image/png, image/jpeg, image/jpg"
+                className="hidden" 
+              />
+          </div>
+
+            {/* Name & Role */}
+            <h2 className="text-lg font-semibold">{userData.fullName || "User"}</h2>
+            
+            <div className="mt-3 flex flex-col gap-2 w-full">
+               {/* Status Pill */}
+               <div className="flex justify-center">
+                 <span className="px-4 py-1 text-xs font-semibold uppercase tracking-wide rounded-full bg-gray-800 text-white">
+                   {userData.status || "Active"}
+                 </span>
+               </div>
+            </div>
+
+            <div className="w-full border-t border-gray-200 my-6" />
+
+            {/* Contact Info List */}
+            <div className="w-full space-y-3 text-sm text-left px-2">
+              <div className="flex items-center gap-3 text-gray-600">
+                <Phone size={15} />
+                <span className="truncate">{userData.phone || "No phone"}</span>
+              </div>
+              <div className="flex items-center gap-3 text-gray-600">
+                <MapPin size={18} />
+                <span className="truncate">{userData.workInfo?.location || "No location"}</span>
+              </div>
+              <div className="flex items-center gap-3 text-gray-600">
+                <Mail size={18} />
+                <span className="truncate" title={userData.email}>{userData.email}</span>
+              </div>
+            </div>
+          </aside>
+
+
+          {/* === RIGHT CONTENT (Tabs & Forms) === */}
+          <main className="flex-1 flex flex-col">
+            
+            {/* Tab Navigation Header */}
+            <div className="px-6 pt-4 border-b border-gray-200">
+              <div className="flex gap-8 overflow-x-auto">
+                
+                <button
+                  onClick={() => setActiveTab("profile")}
+                  className={`pb-4 text-sm font-medium flex items-center gap-2 transition-colors relative ${
+                    activeTab === "profile" ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <User size={18} /> Profile
+                  {activeTab === "profile" && (
+                    <span className="absolute bottom-0 left-0 w-full h-[2px] bg-gray-900 rounded-t-full" />
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("account")}
+                  className={`pb-4 text-sm font-medium flex items-center gap-2 transition-colors relative ${
+                    activeTab === "account" ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <Lock size={18} /> Account
+                  {activeTab === "account" && (
+                    <span className="absolute bottom-0 left-0 w-full h-[2px] bg-gray-900 rounded-t-full" />
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("notifications")}
+                  className={`pb-4 text-sm font-medium flex items-center gap-2 transition-colors relative ${
+                    activeTab === "notifications" ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  <Bell size={18} /> Notifications
+                  {activeTab === "notifications" && (
+                    <span className="absolute bottom-0 left-0 w-full h-[2px] bg-gray-900 rounded-t-full" />
+                  )}
+                </button>
+
+                {getRoleName() === "ADMIN" && (
+                  <button
+                    onClick={() => setActiveTab("organization")}
+                    className={`pb-4 text-sm font-medium flex items-center gap-2 transition-colors relative ${
+                      activeTab === "organization" ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    <Building size={18} /> Organization
+                    {activeTab === "organization" && (
+                      <span className="absolute bottom-0 left-0 w-full h-[2px] bg-gray-900 rounded-t-full" />
+                    )}
+                  </button>
+                )}
+
               </div>
             </div>
 
-            <h2 className="mt-4 text-lg font-semibold">Mahendra</h2>
-
-            <span className="px-3 py-1 mt-2 text-xs rounded-full bg-gray-100 text-[#137337] flex items-center gap-1">
-              <span className="w-2 h-2 bg-[#137337] rounded-full"></span>
-              Active
-            </span>
-          </div>
-
-          <div className="my-5 border-t" />
-
-          <div className="space-y-3 text-sm">
-            <div className="flex items-center gap-2">
-              <Phone size={15} className="text-gray-500" />
-              <span>+62-xxxx-xxxx</span>
+            {/* Tab Content Area */}
+            <div className="p-6 flex-1">
+              {activeTab === "profile" && (
+                <ProfileTab initialData={{
+                    ...userData,
+                    role: getRoleName(), // Kita paksa jadi string disini
+                  }} onUpdateSuccess={fetchProfile} />
+              )}
+              {activeTab === "account" && <AccountTab />}
+              {activeTab === "notifications" && <NotificationTab />}
+              {activeTab === "organization" && getRoleName() === "ADMIN" && <OrganizationTab />}
             </div>
 
-            <div className="flex items-center gap-2">
-              <MapPin size={15} className="text-gray-500" />
-              <span>Indonesia</span>
-            </div>
+          </main>
 
-            <div className="flex items-center gap-2">
-              <Mail size={15} className="text-gray-500" />
-              <span>email@example.com</span>
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT CARD */}
-        <div className="col-span-2 bg-white border border-gray-200 shadow-sm rounded-2xl flex flex-col overflow-hidden h-full">
-
-          {/* TABS */}
-          <div className="flex justify-center border-b border-gray-200 pt-2 pb-1">
-            <div className="flex items-center gap-10">
-
-              <button
-                onClick={() => setActiveTab("profile")}
-                className={`flex flex-col items-center px-6 py-3 font-medium ${
-                  activeTab === "profile" ? "text-[#5A4FB5]" : "text-gray-500"
-                }`}
-              >
-                <span className="flex items-center gap-1">
-                  <User size={20} /> Profile
-                </span>
-                <div
-                  className={`w-full h-[3px] rounded-full mt-1 ${
-                    activeTab === "profile" ? "bg-[#5A4FB5]" : "bg-transparent"
-                  }`}
-                />
-              </button>
-
-              <button
-                onClick={() => setActiveTab("account")}
-                className={`flex flex-col items-center px-6 py-3 font-medium ${
-                  activeTab === "account" ? "text-[#5A4FB5]" : "text-gray-500"
-                }`}
-              >
-                <span className="flex items-center gap-1">
-                  <Lock size={20} /> Account
-                </span>
-                <div
-                  className={`w-full h-[3px] rounded-full mt-1 ${
-                    activeTab === "account" ? "bg-[#5A4FB5]" : "bg-transparent"
-                  }`}
-                />
-              </button>
-
-              <button
-                onClick={() => setActiveTab("notifications")}
-                className={`flex flex-col items-center px-6 py-3 font-medium ${
-                  activeTab === "notifications" ? "text-[#5A4FB5]" : "text-gray-500"
-                }`}
-              >
-                <span className="flex items-center gap-1">
-                  <Bell size={20} /> Notifications
-                </span>
-                <div
-                  className={`w-full h-[3px] rounded-full mt-1 ${
-                    activeTab === "notifications" ? "bg-[#5A4FB5]" : "bg-transparent"
-                  }`}
-                />
-              </button>
-                {userRole === "ADMIN" && (
-                <button
-                  onClick={() => setActiveTab("organization")}
-                  className={`flex flex-col items-center px-6 py-3 font-medium ${
-                    activeTab === "organization" ? "text-[#5A4FB5]" : "text-gray-500"
-                  }`}
-                >
-                  <span className="flex items-center gap-1">
-                    <Building size={20} /> Organization
-                  </span>
-                  <div className={`w-full h-[3px] rounded-full mt-1 ${activeTab === "organization" ? "bg-[#5A4FB5]" : "bg-transparent"}`} />
-                </button>
-                )}
-            </div>
-            
-          </div>
-
-          {/* SCROLLABLE TAB CONTENT */}
-          <div className="p-6 flex-1 overflow-y-auto">
-            {activeTab === "profile" && <ProfileTab />}
-            {activeTab === "account" && <AccountTab />}
-            {activeTab === "notifications" && <NotificationTab />}
-            {activeTab === "organization" && userRole === "ADMIN" && <OrganizationTab />}
-          </div>
         </div>
       </div>
     </div>

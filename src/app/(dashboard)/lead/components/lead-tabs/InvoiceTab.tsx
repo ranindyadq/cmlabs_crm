@@ -28,7 +28,6 @@ export default function InvoiceTab({  leadId,
   // 1. FETCH INVOICES
   const fetchInvoices = async () => {
     try {
-      onRefresh?.();
       setLoading(true);
       const res = await apiClient.get(`/leads/${leadId}?activity_type=INVOICE`);
       setInvoices(res.data.data.invoices || []);
@@ -56,6 +55,7 @@ export default function InvoiceTab({  leadId,
       });
       setShowAddPopup(false);
       fetchInvoices();
+      onRefresh?.();
     } catch (error) {
       alert("Gagal membuat invoice (Cek nomor invoice unik)");
     }

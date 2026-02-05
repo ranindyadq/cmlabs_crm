@@ -17,13 +17,15 @@ const updateProfileSchema = z.object({
     .min(10, "Nomor telepon tidak valid")
     .optional()
     .or(z.literal("")), // Boleh kosong string ""
-    
-  bio: z.string().max(100, "Bio maksimal 100 karakter").optional(),
-  
-  location: z.string().max(50).optional(),
-  
+
+  workInfo: z.object({
+    department: z.string().optional(),
+    bio: z.string().max(100, "Bio maksimal 100 karakter").optional(),
+    location: z.string().max(50).optional(),
+    reportsTo: z.string().optional(),
+    skills: z.string().optional()
+    }).optional()
   // Frontend mengirim string (misal: "React, Vue"), kita validasi string
-  skills: z.string().optional(),
 });
 
 // ==========================================
@@ -37,7 +39,8 @@ export async function GET(req: Request) {
     const userData = await prisma.user.findUnique({
       where: { id: user.id },
       include: { 
-        workInfo: true // Pastikan ini 'userWorkInfo' sesuai schema Prisma kamu
+        workInfo: true, // Pastikan ini 'userWorkInfo' sesuai schema Prisma kamu
+        role: true
       },
     });
 
@@ -68,9 +71,7 @@ export async function PATCH(req: Request) {
       }, { status: 400 });
     }
 
-    // Ambil data yang SUDAH BERSIH dan TERVALIDASI
-    // Zod otomatis membuang field 'sampah' (seperti role/email) jika tidak ada di schema
-    const { fullName, phone, bio, location, skills } = validation.data;
+    const { fullName, phone, workInfo } = validation.data;
 
     // --- MULAI TRANSAKSI DATABASE ---
     await prisma.$transaction(async (tx) => {
@@ -85,11 +86,30 @@ export async function PATCH(req: Request) {
         }
       });
 
-      // 2. Update Work Info
+      const rawSkills = workInfo?.skills;
+      
+      const formattedSkills = rawSkills && typeof rawSkills === 'string' 
+        ? rawSkills.split(',').map((s: string) => s.trim()) 
+        : [];
+
+      // 2. Gunakan formattedSkills di dalam query
       await tx.userWorkInfo.upsert({
         where: { userId: user.id },
-        create: { user: { connect: { id: user.id } }, bio, location, skills },
-        update: { bio, location, skills }
+        create: { 
+            user: { connect: { id: user.id } }, 
+            bio: workInfo?.bio, 
+            location: workInfo?.location, 
+            department: workInfo?.department, 
+            reportsTo: workInfo?.reportsTo,   
+            skills: formattedSkills
+        },
+        update: { 
+            bio: workInfo?.bio, 
+            location: workInfo?.location, 
+            department: workInfo?.department, 
+            reportsTo: workInfo?.reportsTo,   
+            skills: formattedSkills
+        }
       });
 
       // 3. Audit Log
@@ -100,7 +120,7 @@ export async function PATCH(req: Request) {
           entityId: user.id,
           actorId: user.id,
           detailsJson: {
-            changes: { fullName, phone, bio, location } // Data bersih yang dicatat
+            changes: { fullName, phone, ...workInfo } // Data bersih yang dicatat
           }
         }
       });

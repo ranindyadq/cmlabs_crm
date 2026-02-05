@@ -4,42 +4,37 @@ import { useState, useEffect } from "react";
 import { ShoppingBag, Calendar, User, Tag, Contact } from "lucide-react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import apiClient from "@/lib/apiClient"; // Gunakan client API Anda
+import apiClient from "@/lib/apiClient";
 
 interface AddLeadModalProps {
   open: boolean;
   onClose: () => void;
-  onSuccess?: () => void; // Callback untuk refresh data setelah sukses
+  onSuccess?: () => void;
 }
 
-// Tipe data sederhana untuk dropdown
 type Option = { id: string; name: string };
 
 export default function AddLeadModal({ open, onClose, onSuccess }: AddLeadModalProps) {
-  // State Form
   const [leadTitle, setLeadTitle] = useState("");
-  const [value, setValue] = useState<number | "">(""); // Biarkan string kosong awalnya
+  const [value, setValue] = useState(""); 
   const [currency, setCurrency] = useState("IDR");
-  const [stage, setStage] = useState("Lead In"); // Default stage
+  const [stage, setStage] = useState("");
   const [labelId, setLabelId] = useState("");
   const [contactId, setContactId] = useState("");
-  const [ownerId, setOwnerId] = useState(""); // Opsional (jika admin)
+  const [ownerId, setOwnerId] = useState("");
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [description, setDescription] = useState("");
 
-  // State Data Dropdown (Dinamis)
   const [labels, setLabels] = useState<Option[]>([]);
   const [contacts, setContacts] = useState<Option[]>([]);
   const [teamMembers, setTeamMembers] = useState<Option[]>([]);
   
   const [loading, setLoading] = useState(false);
 
-  // 1. Fetch Data Pendukung saat Modal Dibuka
   useEffect(() => {
     if (open) {
       const fetchMetadata = async () => {
         try {
-          // Panggil endpoint metadata yang sudah Anda buat
           const [labelsRes, contactsRes, teamRes] = await Promise.all([
             apiClient.get("/metadata/labels"),
             apiClient.get("/metadata/contacts"),
@@ -49,7 +44,6 @@ export default function AddLeadModal({ open, onClose, onSuccess }: AddLeadModalP
           setLabels(labelsRes.data.data);
           setContacts(contactsRes.data.data);
           
-          // Mapping data team member agar sesuai format Option {id, name}
           const members = teamRes.data.data.map((m: any) => ({ 
             id: m.id, 
             name: m.fullName 
@@ -65,7 +59,10 @@ export default function AddLeadModal({ open, onClose, onSuccess }: AddLeadModalP
     }
   }, [open]);
 
-  // 2. Fungsi Submit
+  const cleanCurrency = (val: string | number) => {
+    return Number(String(val).replace(/\D/g, "")) || 0;
+  };
+
   const handleSubmit = async () => {
     if (!leadTitle) return alert("Title is required!");
     
@@ -73,28 +70,29 @@ export default function AddLeadModal({ open, onClose, onSuccess }: AddLeadModalP
     try {
       const payload = {
         title: leadTitle,
-        value: Number(value) || 0,
+        value: cleanCurrency(value),
         currency,
         stage,
         description,
-        dueDate: dueDate ? dueDate.toISOString() : undefined, // Konversi ke ISO String
+        dueDate: dueDate ? dueDate.toISOString() : undefined,
         labelId: labelId || undefined,
         contactId: contactId || undefined,
-        ownerId: ownerId || undefined, 
-        // companyId: ... (jika ada dropdown company, tambahkan di sini)
+        ownerId: ownerId || undefined,
       };
 
       await apiClient.post("/leads", payload);
 
-      // Reset form dan tutup modal
       onClose();
-      if (onSuccess) onSuccess(); // Refresh halaman utama
+      if (onSuccess) onSuccess();
       
-      // Reset state form
       setLeadTitle("");
       setValue("");
       setDescription("");
       setDueDate(null);
+      setStage("");
+      setLabelId("");
+      setContactId("");
+      setOwnerId("");
       
     } catch (error) {
       console.error("Gagal membuat Lead:", error);
@@ -107,50 +105,62 @@ export default function AddLeadModal({ open, onClose, onSuccess }: AddLeadModalP
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 w-full max-w-md relative animate-fadeIn max-h-[90vh] overflow-y-auto">
-        {/* === Header === */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-[#5A4FB5] p-3 rounded-full flex items-center justify-center">
-            <ShoppingBag className="text-white w-6 h-6" strokeWidth={2} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl p-5 w-full max-w-xl relative max-h-[95vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="bg-[#5A4FB5] dark:bg-white p-2 rounded-full flex items-center justify-center">
+            <ShoppingBag className="text-white dark:text-black w-4 h-4" strokeWidth={2} />
           </div>
-          <h2 className="text-xl font-semibold text-[#2E2E2E] dark:text-white">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             Create New Lead
           </h2>
+          <button
+            onClick={onClose}
+            className="ml-auto text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl w-8 h-8 flex items-center justify-center"
+          >
+            ×
+          </button>
         </div>
 
-        {/* === Form === */}
-        <div className="flex flex-col gap-3 text-sm">
+        {/* Form */}
+        <div className="flex flex-col gap-2">
           {/* Lead Title */}
           <div>
-            <label className="block font-medium mb-1 dark:text-gray-200">Lead Title</label>
+            <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+              Lead Title
+            </label>
             <input
               type="text"
               placeholder="Enter Lead Title"
               value={leadTitle}
               onChange={(e) => setLeadTitle(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] dark:bg-gray-900 dark:text-white"
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400"
             />
           </div>
 
           {/* Value + Currency */}
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="block font-medium mb-1 dark:text-gray-200">Value</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                Value
+              </label>
               <input
-                type="number"
+                type="text"
                 placeholder="0"
                 value={value}
-                onChange={(e) => setValue(e.target.valueAsNumber || "")}
-                className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] dark:bg-gray-900 dark:text-white"
+                onChange={(e) => setValue(e.target.value)}
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400"
               />
             </div>
-            <div className="w-24">
-              <label className="block font-medium mb-1 dark:text-gray-200">Currency</label>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                Currency
+              </label>
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] dark:bg-gray-900 dark:text-white"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400 appearance-none cursor-pointer"
               >
                 <option>IDR</option>
                 <option>USD</option>
@@ -160,14 +170,17 @@ export default function AddLeadModal({ open, onClose, onSuccess }: AddLeadModalP
           </div>
 
           {/* Stage + Label */}
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="block font-medium mb-1 dark:text-gray-200">Stage</label>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                Stage
+              </label>
               <select
                 value={stage}
                 onChange={(e) => setStage(e.target.value)}
-                className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] dark:bg-gray-900 dark:text-white"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400 appearance-none cursor-pointer"
               >
+                <option value="">Select Stage</option>
                 <option>Lead In</option>
                 <option>Contact Mode</option>
                 <option>Need Identified</option>
@@ -179,15 +192,16 @@ export default function AddLeadModal({ open, onClose, onSuccess }: AddLeadModalP
               </select>
             </div>
 
-            <div className="flex-1">
-              <label className="block font-medium mb-1 dark:text-gray-200">Label</label>
+            <div>
+              <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+                Label
+              </label>
               <select
                 value={labelId}
                 onChange={(e) => setLabelId(e.target.value)}
-                className="w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] dark:bg-gray-900 dark:text-white"
+                className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400 appearance-none cursor-pointer"
               >
                 <option value="">Select Label</option>
-                {/* 💡 MAP DATA DARI BACKEND */}
                 {labels.map((lbl) => (
                   <option key={lbl.id} value={lbl.id}>{lbl.name}</option>
                 ))}
@@ -195,55 +209,55 @@ export default function AddLeadModal({ open, onClose, onSuccess }: AddLeadModalP
             </div>
           </div>
 
-          {/* Contact (Dropdown Dinamis) */}
+          {/* Contacts */}
           <div>
-            <label className="block font-medium mb-1 dark:text-gray-200">Contact</label>
-            <div className="relative">
-                <Contact size={16} className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500"/>
-                <select
-                    value={contactId}
-                    onChange={(e) => setContactId(e.target.value)}
-                    className="w-full border border-gray-300 dark:border-gray-700 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] dark:bg-gray-900 dark:text-white"
-                >
-                    <option value="">Select Contact Person</option>
-                    {contacts.map((contact) => (
-                    <option key={contact.id} value={contact.id}>{contact.name}</option>
-                    ))}
-                </select>
-            </div>
+            <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+              Contacts
+            </label>
+            <input
+              type="text"
+              placeholder="Enter Contacts Name"
+              value={contacts.find(c => c.id === contactId)?.name || ""}
+              onChange={(e) => {
+                const contact = contacts.find(c => c.name.toLowerCase().includes(e.target.value.toLowerCase()));
+                setContactId(contact?.id || "");
+              }}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400"
+            />
           </div>
 
-          {/* Team Member (Dropdown Dinamis) */}
+          {/* Team Member */}
           <div>
-            <label className="block font-medium mb-1 dark:text-gray-200">Team Member (Owner)</label>
-            <div className="relative">
-                <User size={16} className="absolute left-3 top-2.5 text-gray-400 dark:text-gray-500"/>
-                <select
-                    value={ownerId}
-                    onChange={(e) => setOwnerId(e.target.value)}
-                    className="w-full border border-gray-300 dark:border-gray-700 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] dark:bg-gray-900 dark:text-white"
-                >
-                    <option value="">Assign to Me (Default)</option>
-                    {teamMembers.map((member) => (
-                    <option key={member.id} value={member.id}>{member.name}</option>
-                    ))}
-                </select>
-            </div>
+            <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+              Team Member
+            </label>
+            <input
+              type="text"
+              placeholder="Enter Team Member Name"
+              value={teamMembers.find(m => m.id === ownerId)?.name || ""}
+              onChange={(e) => {
+                const member = teamMembers.find(m => m.name.toLowerCase().includes(e.target.value.toLowerCase()));
+                setOwnerId(member?.id || "");
+              }}
+              className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400"
+            />
           </div>
 
           {/* Due Date */}
           <div>
-            <label className="block font-medium mb-1 dark:text-gray-200">Due Date</label>
-            <div className="relative w-full dark:text-white dark:[&_input]:bg-gray-900 dark:[&_input]:border-gray-700 dark:[&_input]:text-white">
+            <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+              Due Date
+            </label>
+            <div className="relative">
               <Calendar
                 size={16}
-                className="absolute left-3 top-3 text-gray-500 dark:text-gray-400 pointer-events-none z-10"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none z-10"
               />
               <DatePicker
                 selected={dueDate}
                 onChange={(date) => setDueDate(date)}
                 placeholderText="Select Date"
-                className="w-full pl-9 border border-gray-300 dark:border-gray-700 rounded-lg py-2 focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] bg-transparent"
+                className="w-full pl-10 pr-3 py-1.5 border text-sm border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400"
                 wrapperClassName="w-full"
               />
             </div>
@@ -251,15 +265,17 @@ export default function AddLeadModal({ open, onClose, onSuccess }: AddLeadModalP
 
           {/* Description */}
           <div>
-            <label className="block font-medium mb-1 dark:text-gray-200">Description</label>
+            <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">
+              Description
+            </label>
             <textarea
               placeholder="Enter Lead Description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={100}
-              className="w-full h-24 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] resize-none dark:bg-gray-900 dark:text-white"
+              className="w-full h-15 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 dark:focus:ring-gray-400 resize-none"
             />
-            <div className="text-right text-xs text-gray-400 dark:text-gray-500">
+            <div className="text-right text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               {description.length}/100
             </div>
           </div>
@@ -269,17 +285,9 @@ export default function AddLeadModal({ open, onClose, onSuccess }: AddLeadModalP
         <button
           onClick={handleSubmit}
           disabled={loading}
-          className="mt-5 w-full bg-[#5A4FB5] text-white font-medium py-2.5 rounded-full hover:bg-[#493e9b] transition disabled:opacity-50"
+          className="mt-1 w-full bg-black dark:bg-white text-white dark:text-black font-medium py-2 rounded-full hover:bg-gray-800 dark:hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
         >
           {loading ? "Creating..." : "Create Lead"}
-        </button>
-
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-3 right-4 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 text-xl"
-        >
-          ×
         </button>
       </div>
     </div>

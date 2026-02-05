@@ -8,8 +8,18 @@ export async function GET(req: Request) {
   try {
     // 🔒 Security Check
     const user = await getSessionUser(req);
+    // 1. Cek Login
     if (!user) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    // 2. Cek Role (Hanya Admin yang boleh lihat list team)
+    // Asumsi role di database tersimpan sebagai string 'ADMIN' atau object { name: 'ADMIN' }
+    // Sesuaikan logic ini dengan struktur object user Anda
+    if (!user || user.role !== 'ADMIN') { // Tambahkan role lain jika perlu
+        return NextResponse.json({ 
+            message: "Forbidden: You don't have permission to view team list." 
+        }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
@@ -42,16 +52,18 @@ export async function GET(req: Request) {
           fullName: true,
           email: true,
           phone: true,
+          photo: true,
           status: true,
           createdAt: true, 
-          role: { select: { name: true } },
-          workInfo: { 
-            select: { 
-              roleTitle: true, 
-              department: true,
-              joinedAt: true 
-            } 
-          }
+          role: { select: { name: true } },     // Ambil nested
+          workInfo: { select: {                 // Ambil nested
+             roleTitle: true, 
+             department: true,
+             joinedAt: true,
+             location: true,
+             bio: true,
+             skills: true
+          }}
         },
         skip: skip,
         take: limit,
@@ -59,9 +71,25 @@ export async function GET(req: Request) {
       }),
       prisma.user.count({ where: whereClause })
     ]);
+
+    // ✅ TRANSFORMASI DATA DI SINI
+    // Map data raw dari Prisma menjadi data bersih
+    const cleanData = users.map((user) => ({
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone,
+      status: user.status,
+      photo: user.photo,
+      // FLATTEN OBJECT
+      roleName: user.role?.name || "Member",
+      roleTitle: user.workInfo?.roleTitle || "Staff",
+      department: user.workInfo?.department || "-",
+      joinedAt: user.workInfo?.joinedAt,
+    }));
     
     return NextResponse.json({ 
-      data: users,
+      data: cleanData, // Kirim data yang sudah bersih
       pagination: {
         total,
         page,
@@ -85,7 +113,21 @@ export async function POST(req: Request) {
 }
 
     const body = await req.json();
-    const { fullName, email, password, roleName, phone, department, roleTitle } = body;
+    const { 
+        fullName, email, password, roleName, phone, 
+        department, roleTitle, 
+        bio, skills, status, location, joinedAt 
+    } = body;
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    
+    if (!email || !emailRegex.test(email)) {
+        return NextResponse.json({ 
+            // Pesan ini nanti akan ditangkap frontend dan dimasukkan ke state error
+            message: "Invalid email format" 
+        }, { status: 400 });
+    }
+
     const passwordToHash = password || 'password123'; 
     const hashedPassword = await bcrypt.hash(passwordToHash, 10);
 
@@ -104,13 +146,20 @@ export async function POST(req: Request) {
         email,
         phone,
         passwordHash: hashedPassword,
-        status: 'ACTIVE',
+        status: status || 'ACTIVE',
+        // Note: Untuk skills, pastikan di schema.prisma tipenya String[] atau Json. 
+        // Jika schema-nya String, pakai: skills.join(", ")
         roleId: role.id,
         workInfo: {
           create: {
             department: department || 'General',
             roleTitle: roleTitle || 'Staff',
-            joinedAt: new Date()
+            location: location, 
+            bio: bio,
+            skills: Array.isArray(skills) ? skills : [],
+            // ✅ UPDATE JOIN DATE
+            // Pakai tanggal inputan, kalau kosong baru NOW
+            joinedAt: joinedAt ? new Date(joinedAt) : new Date()
           }
         }
       }

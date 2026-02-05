@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth-helper"; // Import Helper Auth
-import { validateRequest } from "@/lib/validate-request"; // Import Helper Validasi
-import { createLeadSchema } from "@/validations/lead.schema"; // Import Schema Zod
+import { getSessionUser } from "@/lib/auth-helper";
+import { validateRequest } from "@/lib/validate-request";
+import { createLeadSchema } from "@/validations/lead.schema";
 
-// --- HELPER FUNCTION: Build Where Condition ---
+// --- HELPER: Build Filter (Tanpa Logic Role Dulu) ---
 const buildLeadWhereCondition = (searchParams: URLSearchParams) => {
   const search = searchParams.get('search');
   const view = searchParams.get('view');
-  const picId = searchParams.get('picId');
+  // picId kita handle terpisah di dalam logic Role agar aman
   const labelId = searchParams.get('labelId');
   const source = searchParams.get('source');
   const dateStart = searchParams.get('dateStart');
@@ -18,9 +18,12 @@ const buildLeadWhereCondition = (searchParams: URLSearchParams) => {
     deletedAt: null,
   };
 
+  // Filter View (Active vs Archived)
+  // Asumsi: Status ACTIVE adalah yang sedang berjalan
   if (view === 'active') whereCondition.status = 'ACTIVE';
   else if (view === 'archived') whereCondition.status = { in: ['WON', 'LOST'] };
 
+  // Search Logic (Global Search)
   if (search) {
     whereCondition.OR = [
       { title: { contains: search, mode: 'insensitive' } },
@@ -29,10 +32,11 @@ const buildLeadWhereCondition = (searchParams: URLSearchParams) => {
     ];
   }
 
-  if (picId) whereCondition.ownerId = picId;
+  // Filter Lainnya
   if (labelId) whereCondition.labels = { some: { labelId: labelId } };
   if (source) whereCondition.sourceOrigin = source;
 
+  // Filter Tanggal
   if (dateStart && dateEnd) {
     whereCondition.createdAt = { gte: new Date(dateStart), lte: new Date(dateEnd) };
   } else if (dateStart) {
@@ -47,46 +51,46 @@ const buildLeadWhereCondition = (searchParams: URLSearchParams) => {
 // --- GET ALL LEADS ---
 export async function GET(req: Request) {
   try {
-    // 1. CEK AUTHENTICATION (Proteksi Route)
+    // 1. CEK AUTH
     const user = await getSessionUser(req);
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
+    if (!user) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const skip = (page - 1) * limit;
 
-    const whereCondition = buildLeadWhereCondition(searchParams);
-    const baseWhere: any = { 
-            deletedAt: null,
-        };
+    // 2. BUILD FILTER DASAR (Search, Date, dll)
+    const filterWhere = buildLeadWhereCondition(searchParams);
 
-    // Asumsi: getSessionUser mengembalikan role name (misal: "SALES", "ADMIN")
-        // Jika user adalah SALES, PAKSA filter hanya milik dia sendiri
-        if (user.role === 'SALES') {
-            baseWhere.ownerId = user.id; 
-        } else {
-            // Jika Admin/Owner, baru boleh pakai filter dari URL
-            const picId = searchParams.get('picId');
-            if (picId) baseWhere.ownerId = picId;
-        }
+    // 3. TERAPKAN LOGIKA ROLE (KEAMANAN DATA)
+    // Kita gabungkan filter user + filter role
+    const finalWhere = { ...filterWhere };
 
+    if (user.role === 'SALES') {
+       // 🔒 SALES: DIPAKSA hanya lihat punya sendiri
+       finalWhere.ownerId = user.id;
+    } else {
+       // 🔓 ADMIN: Boleh lihat semua, atau filter by PIC jika diminta di URL
+       const picIdParam = searchParams.get('picId');
+       if (picIdParam) finalWhere.ownerId = picIdParam;
+    }
+
+    // 4. QUERY DATABASE
     const [leads, totalLeads] = await prisma.$transaction([
       prisma.lead.findMany({
-        where: whereCondition,
+        where: finalWhere, // <--- Pakai finalWhere yang sudah aman
         skip: skip,
         take: limit,
         include: {
-          owner: { select: { fullName: true, email: true } },
+          owner: { select: { fullName: true, email: true, photo: true } }, // Tambah photo biar UI bagus
           contact: true,
           company: true,
           labels: { include: { label: true } }
         },
         orderBy: { createdAt: 'desc' },
       }),
-      prisma.lead.count({ where: whereCondition }),
+      prisma.lead.count({ where: finalWhere }),
     ]);
 
     const totalPages = Math.ceil(totalLeads / limit);
@@ -109,24 +113,23 @@ export async function GET(req: Request) {
 // --- CREATE LEAD ---
 export async function POST(req: Request) {
   try {
-    // 1. CEK AUTHENTICATION
     const user = await getSessionUser(req);
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
+    if (!user) return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
 
-    // 2. CEK VALIDASI BODY (Menggunakan Zod Schema)
     const validation = await validateRequest(req, createLeadSchema);
-    
-    // Jika validasi gagal, kembalikan detail error (400)
-    if (!validation.success) {
-      return validation.response; 
-    }
+    if (!validation.success) return validation.response; 
 
-    // Data yang sudah bersih dan bertipe aman
     const body = validation.data; 
 
-    // 3. LOGIKA SIMPAN KE DATABASE
+    // 🔒 LOGIKA OWNER SAAT CREATE
+    // Sales tidak boleh assign lead ke orang lain
+    let assignedOwnerId = user.id;
+    
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+        // Admin boleh tentukan owner, kalau kosong default ke diri sendiri
+        assignedOwnerId = body.ownerId || user.id;
+    }
+
     const newLead = await prisma.lead.create({
       data: {
         title: body.title,
@@ -134,21 +137,16 @@ export async function POST(req: Request) {
         currency: body.currency || "IDR",
         stage: body.stage || "Lead In",
         description: body.description,
-        dueDate: body.dueDate, // Zod coerce sudah mengubahnya jadi Date object
+        dueDate: body.dueDate,
         
-        // Relasi Owner: Gunakan ID user yang sedang login (Session)
-        // Kecuali jika admin menginput ownerId lain (sesuai schema)
-        ownerId: body.ownerId || user.id,
+        ownerId: assignedOwnerId, // <--- Pakai ID yang sudah divalidasi
         
-        // Relasi Label (Many-to-Many)
-        // Sesuai schema validation, kita menerima labelId (singular)
         labels: {
           create: body.labelId 
             ? [{ label: { connect: { id: body.labelId } } }] 
             : []
         },
 
-        // Relasi Opsional lain (Contact, Company, dll)
         contactId: body.contactId,
         companyId: body.companyId,
         sourceOrigin: body.sourceOrigin,
@@ -167,9 +165,8 @@ export async function POST(req: Request) {
     }, { status: 201 });
 
   } catch (error: any) {
-    // Tangani Error Foreign Key Prisma
     if (error.code === 'P2003' || error.code === 'P2025') {
-      return NextResponse.json({ message: 'Label, Contact, Company, or Owner not found' }, { status: 404 });
+      return NextResponse.json({ message: 'Data relation not found' }, { status: 404 });
     }
     console.error("Error in createLead:", error);
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 });

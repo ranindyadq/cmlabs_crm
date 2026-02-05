@@ -25,10 +25,10 @@ export function middleware(request: NextRequest) {
 // Tentukan path mana saja yang kena middleware
 export const config = {
   matcher: [
-    "/dashboard/:path*", 
-    "/profile/:path*",
+    // "/dashboard/:path*", 
+    // "/profile/:path*",
     "/team/:path*",
-    "/lead/:path*",
-    "/auth/:path*"
+    // "/lead/:path*",
+    // "/auth/:path*"
   ],
 };

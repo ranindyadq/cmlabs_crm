@@ -1,16 +1,17 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "@/components/layouts/AuthLayout";
 import { useTheme } from "@/lib/context/ThemeContext";
 import { HiArrowLongLeft } from "react-icons/hi2";
 import { FaCheckCircle, FaLockOpen, FaHourglassEnd, FaExclamationTriangle } from "react-icons/fa";
 
-export default function ResetStatusPage() {
-  const params = useSearchParams();
-  const state = params.get("state");
-  const email = params.get("email"); 
+function ResetStatusContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const state = searchParams.get("state");
+  const email = searchParams.get("email"); 
   const isSuccess = state === "success";
 
   const { theme } = useTheme();
@@ -73,5 +74,13 @@ export default function ResetStatusPage() {
       </div>
       </div>
     </AuthLayout>
+  );
+}
+
+export default function ResetStatusPage() {
+  return (
+    <Suspense fallback={<div className="p-10 text-center">Loading status...</div>}>
+      <ResetStatusContent />
+    </Suspense>
   );
 }

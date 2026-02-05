@@ -23,8 +23,9 @@ export default async function TeamDetailPage({ params }: { params: { id: string 
     email: user.email,
     joined: user.workInfo?.joinedAt ? new Date(user.workInfo.joinedAt).toLocaleDateString() : "-",
     bio: user.workInfo?.bio || "No bio available.",
-    skills: user.workInfo?.skills ? user.workInfo.skills.split(",") : [],
+    skills: user.workInfo?.skills || [],
     phone: user.phone || "-",
+    location: user.workInfo?.location || "-",
   };
 
   return <TeamDetail member={memberData} />;

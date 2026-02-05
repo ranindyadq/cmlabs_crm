@@ -3,14 +3,20 @@
 import { LeadHeader } from "./LeadHeader";
 import { LeadSidebar } from "./LeadSidebar";
 import { LeadTabs } from "./LeadTabs";
+import { useRouter } from "next/navigation";
 
-// Tambahkan onRefresh ke props
 type LeadDetailProps = {
   lead: any;
-  onRefresh: () => void;
 };
 
-export default function LeadDetail({ lead, onRefresh }: LeadDetailProps) {
+export default function LeadDetail({ lead }: LeadDetailProps) {
+  const router = useRouter(); 
+
+  // ✅ Definisikan onRefresh di sini
+  const onRefresh = () => {
+    router.refresh(); 
+  };
+
   return (
     <div className="flex flex-col gap-4 text-[#2E2E2E] dark:text-white">
       {/* Header (Status, Title) */}
@@ -22,7 +28,10 @@ export default function LeadDetail({ lead, onRefresh }: LeadDetailProps) {
         
         {/* Tabs (Activities) */}
         <div className="flex-1 min-w-0">
-          <LeadTabs lead={lead} />
+          <LeadTabs 
+            lead={lead} 
+            onRefresh={onRefresh} 
+          />
         </div>
       </div>
     </div>

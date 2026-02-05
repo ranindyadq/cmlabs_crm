@@ -1,13 +1,20 @@
-
 export async function register() {
-  // Kita cek runtime agar cron job hanya jalan di lingkungan Node.js (bukan di Edge/Browser)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     
-    // Import dinamis agar modul ini tidak dimuat di sisi klien
-    const { startReminderScheduler } = await import('./services/reminder.service');
-    
-    // Jalankan Scheduler
-    console.log("🚀 Starting Instrumentation: Reminder Service...");
-    startReminderScheduler();
+    // Cek apakah kita sedang di Local Development
+    // Vercel selalu set NODE_ENV=production saat deploy
+    if (process.env.NODE_ENV === 'development') { 
+        
+        const { startReminderScheduler } = await import('./services/reminder.service');
+
+        // Singleton check untuk hot-reload di dev
+        if (!(global as any).reminderSchedulerStarted) {
+            console.log("🚀 [LOCAL MODE] Starting Reminder Scheduler (Node-Cron)...");
+            startReminderScheduler();
+            (global as any).reminderSchedulerStarted = true;
+        }
+    } else {
+        console.log("☁️ [PRODUCTION MODE] Scheduler disabled. Waiting for Vercel Cron trigger.");
+    }
   }
 }

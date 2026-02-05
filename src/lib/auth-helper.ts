@@ -14,7 +14,7 @@ export interface SessionUser {
 export async function getSessionUser(req: Request): Promise<SessionUser | null> {
     try {
     // 1. Ambil Token
-    const cookieStore = await cookies();
+    const cookieStore = cookies();
     let token = cookieStore.get('token')?.value;
 
     if (!token) {

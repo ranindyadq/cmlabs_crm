@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState,useEffect } from "react";
 import apiClient from "@/lib/apiClient";
 import { Edit, Calendar, User, Phone, Mail, ChevronDown, X } from "lucide-react";
 
@@ -23,25 +23,45 @@ export function LeadSidebar({ lead, onRefresh }: LeadSidebarProps) {
     value: lead.value || 0,
     currency: lead.currency || "IDR",
     description: lead.description || "",
-    // Note: Company & Contact idealnya dropdown ID, tapi untuk simpel kita pakai string dulu jika API belum support edit relasi kompleks
+    // Kita simpan sebagai string nama dulu sesuai request Anda
+    company_name: lead.company?.name || "", 
+    contact_name: lead.contact?.name || "",
   });
 
   const handleChange = (e: any) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const cleanCurrency = (val: string | number) => {
+    return Number(String(val).replace(/\D/g, "")) || 0;
+  };
+
+  useEffect(() => {
+    if (showEditModal) {
+      setFormData({
+        value: lead.value || 0, // Ini nanti akan jadi string di input text
+        currency: lead.currency || "IDR",
+        description: lead.description || "",
+        company_name: lead.company?.name || "",
+        contact_name: lead.contact?.name || "",
+      });
+    }
+  }, [showEditModal, lead]);
+
   // HANDLE SAVE
   const handleSave = async () => {
     try {
       setSaving(true);
-      // Kirim Data ke Backend
       await apiClient.patch(`/leads/${lead.id}`, {
-        value: Number(formData.value), // Pastikan number
+        value: cleanCurrency(formData.value),
         currency: formData.currency,
-        description: formData.description
+        description: formData.description,
+        // Kirim data tambahan (pastikan backend Anda siap menerima field ini)
+        company_name: formData.company_name, 
+        contact_name: formData.contact_name,
       });
       
-      onRefresh(); // Refresh tampilan
+      onRefresh(); 
       setShowEditModal(false);
     } catch (error) {
       console.error("Update failed:", error);
@@ -56,25 +76,26 @@ export function LeadSidebar({ lead, onRefresh }: LeadSidebarProps) {
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow p-2 flex flex-col gap-2 h-fit max-h-[calc(85.2vh-185.2px)] overflow-y-auto transition-colors">
 
         {/* ===== SUMMARY SECTION ===== */}
-        <div className="border-b dark:border-gray-700">
-          <button 
-            onClick={() => setSummaryOpen(!summaryOpen)}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-gray-800 dark:text-white">Summary</h3>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowEditModal(true);
-                }}
-                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
-              >
-                <Edit className="w-3.5 h-3.5 text-gray-400 dark:text-gray-400 hover:text-[#5A4FB5] dark:hover:text-[#5A4FB5]" />
-              </button>
-            </div>
-            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${summaryOpen ? 'rotate-180' : ''}`} />
-          </button>
+        <div 
+          onClick={() => setSummaryOpen(!summaryOpen)}
+          className="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer" // Tambah cursor-pointer
+        >
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-gray-800 dark:text-white">Summary</h3>
+            
+            {/* Button Edit tetap Button, tapi sekarang aman karena parent-nya Div */}
+            <button 
+              onClick={(e) => {
+                e.stopPropagation(); // Mencegah accordion tertutup saat klik edit
+                setShowEditModal(true);
+              }}
+              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
+            >
+              <Edit className="w-3.5 h-3.5 text-gray-400 dark:text-gray-400 hover:text-[#5A4FB5] dark:hover:text-[#5A4FB5]" />
+            </button>
+          </div>
+          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${summaryOpen ? 'rotate-180' : ''}`} />
+        </div>
 
           {summaryOpen && (
             <div className="px-4 pb-4 text-sm text-gray-600 dark:text-gray-300 space-y-3">
@@ -212,8 +233,6 @@ export function LeadSidebar({ lead, onRefresh }: LeadSidebarProps) {
           )}
         </div>
 
-      </div>
-
       {/* MODAL EDIT (Hanya Value & Desc untuk saat ini) */}
       {showEditModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -228,13 +247,37 @@ export function LeadSidebar({ lead, onRefresh }: LeadSidebarProps) {
               <div>
                 <label className="block text-sm font-medium mb-1 dark:text-gray-200">Deal Value</label>
                 <input
-                  type="number"
+                  type="text"
                   name="value"
                   value={formData.value}
                   onChange={handleChange}
                   className="w-full border dark:border-gray-700 bg-white dark:bg-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
                 />
               </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1 dark:text-gray-200">Company Name</label>
+                <input
+                  type="text"
+                  name="company_name"
+                  value={formData.company_name}
+                  onChange={handleChange}
+                  placeholder="Contoh: PT. Mencari Cinta Sejati"
+                  className="w-full border dark:border-gray-700 bg-white dark:bg-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
+                />
+              </div>
+
+              <div>
+              <label className="block text-sm font-medium mb-1 dark:text-gray-200">Contact Person</label>
+              <input
+                type="text"
+                name="contact_name"
+                value={formData.contact_name}
+                onChange={handleChange}
+                placeholder="Nama Kontak"
+                className="w-full border dark:border-gray-700 bg-white dark:bg-gray-900 dark:text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
+              />
+            </div>
               
               <div>
                 <label className="block text-sm font-medium mb-1 dark:text-gray-200">Description</label>

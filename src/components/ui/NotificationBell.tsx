@@ -31,7 +31,7 @@ export default function NotificationBell() {
       setNotifications(res.data.data);
       setUnreadCount(res.data.unreadCount);
     } catch (error) {
-      console.error("Gagal mengambil notifikasi:", error);
+      // console.error("Gagal mengambil notifikasi:", error);
     }
   };
 

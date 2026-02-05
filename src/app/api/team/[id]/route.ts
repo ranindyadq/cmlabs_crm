@@ -16,7 +16,10 @@ export async function PATCH(
 
     const id = params.id;
     const body = await req.json();
-    const { fullName, status, phone, department, roleTitle, roleName } = body;
+    const { 
+        fullName, status, phone, roleName,
+        department, roleTitle, bio, skills, location, joinedAt 
+    } = body;
 
     // Update role jika ada
     let roleUpdate = {};
@@ -37,9 +40,18 @@ export async function PATCH(
             create: { 
               department, 
               roleTitle,
-              joinedAt: new Date() // Opsional: set default joinedAt jika baru dibuat
+              joinedAt: new Date(), // Opsional: set default joinedAt jika baru dibuat
+              bio,
+              location,
+              skills: Array.isArray(skills) ? skills : []
             },
-            update: { department, roleTitle }
+            update: { department, 
+              roleTitle,
+              bio,
+              location,
+              skills: Array.isArray(skills) ? skills : [], 
+            ...(joinedAt && { joinedAt: new Date(joinedAt) })
+           }
           }
         }
       }
@@ -53,10 +65,7 @@ export async function PATCH(
 }
 
 // --- DELETE TEAM MEMBER (SOFT DELETE) ---
-export async function DELETE(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = params.id;
 
@@ -71,13 +80,29 @@ export async function DELETE(
         return NextResponse.json({ message: "Anda tidak dapat menghapus akun Anda sendiri." }, { status: 400 });
     }
 
-    await prisma.user.update({
-      where: { id },
-      data: { 
-        status: 'INACTIVE',
-        deletedAt: new Date() 
-      }
-    });
+    // 1. Cek apakah user punya Lead yang masih aktif (Optional tapi bagus)
+  const activeLeads = await prisma.lead.count({
+    where: { 
+      ownerId: params.id,
+      status: 'ACTIVE' // Sesuaikan dengan enum LeadStatus Anda
+    }
+  });
+
+  if (activeLeads > 0) {
+    return NextResponse.json({ 
+      message: `User ini masih memiliki ${activeLeads} Lead aktif. Harap pindahkan (re-assign) Lead terlebih dahulu sebelum menonaktifkan akun.` 
+    }, { status: 400 });
+  }
+
+  // 2. Lakukan Soft Delete (Non-aktifkan)
+  await prisma.user.update({
+    where: { id: params.id },
+    data: {
+      status: 'INACTIVE', // Atau status khusus 'DELETED' jika ada
+      deletedAt: new Date(), // Tandai waktu penghapusan
+      // Opsional: Kosongkan token login agar dia langsung logout
+    }
+  });
 
     return NextResponse.json({ message: "Anggota tim berhasil dihapus (soft delete)." });
   } catch (error) {

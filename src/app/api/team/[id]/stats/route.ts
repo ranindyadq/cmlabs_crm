@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth-helper";
+import { getSessionUser, checkResourceAccess } from "@/lib/auth-helper";
 
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
@@ -8,6 +8,11 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
     const memberId = params.id;
+
+    // 🔒 GUNAKAN HELPER
+    if (!checkResourceAccess(user, memberId)) {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
 
     // 1. AMBIL SEMUA LEADS MILIK MEMBER INI
     // ✅ PERBAIKAN: Menggunakan 'ownerId'. 
@@ -29,16 +34,24 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       return acc + val;
     }, 0);
 
-    // Logic Probability Manual (Karena tidak ada kolom probability di DB)
-    const getProb = (status: string) => {
-      if (status === "NEGOTIATION") return 80;
-      if (status === "QUALIFIED") return 50;
-      if (status === "CONTACTED") return 30;
-      return 10;
+    const getProb = (stage: string | null) => {
+      // Pastikan logic ini sesuai Enum LeadStage di Prisma
+      const s = stage?.toUpperCase() || "";
+      switch (s) {
+        case "WON": return 100;
+        case "CONTRACT_SEND": return 90;
+        case "NEGOTIATION": return 80;
+        case "PROPOSAL_MADE": return 60;
+        case "NEED_IDENTIFIED": return 40;
+        case "CONTACT_MADE": return 25;
+        case "LEAD_IN": return 10;
+        case "LOST": return 0;
+        default: return 10;
+      }
     };
 
-    const avgProb = activeLeads.length > 0 
-      ? activeLeads.reduce((acc, curr) => acc + getProb(curr.status), 0) / activeLeads.length 
+    const avgProb = activeLeads.length > 0
+      ? activeLeads.reduce((acc, curr) => acc + getProb(curr.stage), 0) / activeLeads.length 
       : 0;
 
     // 4. HITUNG KPI PERFORMANCE (Won)
@@ -57,7 +70,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     // 6. Format Response (Inject probability ke list)
     const activeLeadsWithProb = activeLeads.map(l => ({
       ...l,
-      probability: getProb(l.status),
+      probability: getProb(l.stage),
       value: l.value ? Number(l.value) : 0 
     }));
 

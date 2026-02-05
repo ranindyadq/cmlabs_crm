@@ -4,7 +4,7 @@ import apiClient from '@/lib/apiClient'; // Pastikan path import ini sesuai
 // --- DEFINISI STAGES TETAP (MASTER LIST) ---
 export const FIXED_STAGES = [
   { title: "Lead In", slug: "Lead In" },
-  { title: "Contact Made", slug: "Contact Made" }, // Pastikan slug sesuai string di DB
+  { title: "Contact Mode", slug: "Contact Mode" }, // Pastikan slug sesuai string di DB
   { title: "Need Identified", slug: "Need Identified" },
   { title: "Proposal Made", slug: "Proposal Made" },
   { title: "Negotiation", slug: "Negotiation" },
@@ -12,6 +12,17 @@ export const FIXED_STAGES = [
   { title: "Won", slug: "Won" },
   { title: "Lost", slug: "Lost" },
 ];
+
+// Definisikan tipe Filter
+export interface LeadFilters {
+  search?: string;
+  picId?: string;
+  labelId?: string;
+  source?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+}
 
 // --- INTERFACE UTAMA LEAD ---
 // Export ini agar bisa dipakai di LeadColumn.tsx dan LeadCard.tsx
@@ -46,12 +57,22 @@ const useLeads = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-  const fetchLeads = useCallback(async () => {
+  const fetchLeads = useCallback(async (filters?: LeadFilters) => {
         setIsLoading(true);
         setError(null);
         try {
-            // 🔥 PERUBAHAN KRITIS: Ganti URL ke endpoint Kanban
-            const response = await apiClient.get('/leads/kanban'); 
+            // Konversi object filters ke query string
+            const params = new URLSearchParams();
+            if (filters?.search) params.append('search', filters.search);
+            if (filters?.picId) params.append('picId', filters.picId);
+            if (filters?.labelId) params.append('labelId', filters.labelId);
+            if (filters?.source) params.append('source', filters.source);
+            if (filters?.startDate) params.append('startDate', filters.startDate);
+            if (filters?.endDate) params.append('endDate', filters.endDate);
+            if (filters?.status) params.append('status', filters.status);
+
+            // URL ke endpoint Kanban1
+            const response = await apiClient.get(`/leads/kanban?${params.toString()}`);
             
             // Backend KANBAN harus mengembalikan:
             // response.data.data -> { "Lead In": [...], "Negotiation": [...] }
@@ -79,7 +100,7 @@ const useLeads = () => {
         totalValues: totalPipelineValue,
         isLoading,
         error,
-        refresh: fetchLeads, 
+        refresh: fetchLeads,
     };
 };
 

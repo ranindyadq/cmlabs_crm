@@ -11,38 +11,72 @@ export async function GET(req: Request) {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
         }
 
-        // Ambil filter dari query params (misal: picId, source, dll.)
         const { searchParams } = new URL(req.url);
+
+        // 1. Ambil Parameter Filter
+        const search = searchParams.get('search'); // Pencarian Nama Lead/Company
         const picId = searchParams.get('picId');
         const source = searchParams.get('source');
+        const labelId = searchParams.get('labelId');
+        const startDate = searchParams.get('startDate');
+        const endDate = searchParams.get('endDate');
+        const status = searchParams.get('status');
 
         // Buat kondisi WHERE yang sama dengan di file leads/route.ts,
         // tetapi fokus pada Leads AKTIF (bukan WON/LOST)
         const baseWhere: any = { 
             deletedAt: null,
-            status: { notIn: ['WON', 'LOST'] } // Hanya Leads Aktif
         };
 
-        // Asumsi: getSessionUser mengembalikan role name (misal: "SALES", "ADMIN")
-        // Jika user adalah SALES, PAKSA filter hanya milik dia sendiri
+        // --- FILTER LOGIC ---
+        
+        // A. Search (Title / Company Name)
+        if (search) {
+            baseWhere.OR = [
+                { title: { contains: search, mode: 'insensitive' } },
+                { company: { name: { contains: search, mode: 'insensitive' } } }
+            ];
+        }
+
+        // B. PIC / Owner
+        // Security: Jika Sales, PAKSA filter ke diri sendiri
         if (user.role === 'SALES') {
             baseWhere.ownerId = user.id; 
         } else {
-            // Jika Admin/Owner, baru boleh pakai filter dari URL
-            const picId = searchParams.get('picId');
+            // Jika Admin, baru boleh filter PIC lain
             if (picId) baseWhere.ownerId = picId;
         }
-        
-        if (picId) baseWhere.ownerId = picId;
+
+        // C. Source
         if (source) baseWhere.sourceOrigin = source;
+
+        // D. Label
+        if (labelId) {
+            baseWhere.labels = {
+                some: { labelId: labelId }
+            };
+        }
+
+        // E. Date Range (Created At)
+        if (startDate && endDate) {
+            baseWhere.createdAt = {
+                gte: new Date(startDate),
+                lte: new Date(endDate)
+            };
+        }
+
+        // 🟢 F. Status (Stage)
+        if (status) {
+            baseWhere.stage = status;
+        }
 
         // 2. Ambil SEMUA Leads Aktif (Tanpa Pagination)
         const allLeads = await prisma.lead.findMany({
             where: baseWhere,
             include: {
-                owner: { select: { fullName: true, email: true } },
-                contact: { select: { name: true } }, // Hanya perlu nama kontak
-                company: { select: { name: true } }, // Hanya perlu nama perusahaan
+                owner: { select: { fullName: true, email: true, photo: true } },
+                contact: { select: { name: true } }, 
+                company: { select: { name: true } }, 
                 labels: { include: { label: true } }
             },
             orderBy: { createdAt: 'asc' }, 
@@ -51,7 +85,7 @@ export async function GET(req: Request) {
         // 3. LOGIKA PENGELOMPOKAN DATA BERDASARKAN STAGE
         const groupedLeads: Record<string, any[]> = {};
         const totalValues: Record<string, number> = {};
-
+        
         allLeads.forEach(lead => {
             const stage = lead.stage || 'Unassigned'; // Gunakan nama stage sebagai kunci
             

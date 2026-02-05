@@ -64,7 +64,7 @@ export default function TeamDetail({ member }: TeamDetailProps) {
     "overview" | "deals" | "performance"
   >("overview");
 
-  const normalizedStatus = member.status.toLowerCase() as keyof typeof STATUS;
+const normalizedStatus = member.status.toLowerCase().replace("_", "") as keyof typeof STATUS;
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">

@@ -25,7 +25,10 @@ export default function OverviewTab({ member }: any) {
 
         <div className="mt-6">
           <h4 className="text-sm font-medium text-gray-700">Reports To</h4>
-          <p className="text-sm text-gray-500 mt-1">No manager assigned.</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {/* Jika nanti sudah ada relasi manager di member, ganti member.managerName */}
+            {member.reportsTo || "No manager assigned."}
+          </p>
         </div>
       </div>
     </div>

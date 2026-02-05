@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth-helper"; // <--- PASTIKAN IMPORT INI ADA
-
-const prisma = new PrismaClient();
 
 export async function POST(
   request: NextRequest,
@@ -21,6 +19,14 @@ export async function POST(
 
     const organizerId = user.id; // <--- GUNAKAN ID ASLI DARI SESSION
 
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { ownerId: true } });
+    if (!lead) return NextResponse.json({ message: "Lead not found" }, { status: 404 });
+
+    // Jika user bukan ADMIN dan bukan OWNER lead ini -> Tolak
+    if (user.role !== 'ADMIN' && lead.ownerId !== user.id) {
+       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
+    
     // 2. Ambil Data Body
     const body = await request.json();
     const { 

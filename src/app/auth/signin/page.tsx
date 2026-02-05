@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import InputWithLabel from "@/components/ui/InputWithLabel";
@@ -23,8 +23,13 @@ export default function SignInPage() {
   const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
-  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
-  if (token) router.replace("/dashboard");
+    // Cek apakah ada token di saku manapun
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+    
+    if (token) {
+      // Kalau ada, jangan kasih lihat form login. Langsung lempar ke Dashboard.
+      router.replace("/dashboard");
+    }
   }, [router]);
 
   // 💥 fungsi login ke backend
@@ -34,36 +39,46 @@ export default function SignInPage() {
     setError("");
   
     try {
-    const res = await apiClient.post("/auth/login", { email, password }); // Sesuaikan API call Anda
+      const res = await apiClient.post("/auth/login", { email, password });
 
-    // Cek apakah login sukses
-    if (res.data && res.data.token) {
+      if (res.data && res.data.token) {
         const token = res.data.token;
         const user = res.data.user;
 
-        // 1. SIMPAN KE LOCALSTORAGE (Wajib untuk AuthGuard)
-        localStorage.setItem("token", token);
-        localStorage.setItem("user", JSON.stringify(user));
+        // 1. BERSIHKAN DULU SEMUA (Biar tidak bentrok)
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        sessionStorage.removeItem("token");
+        sessionStorage.removeItem("user");
 
-        // 2. SIMPAN KE COOKIE (Wajib untuk mencegah Looping Middleware)
-        // Kita set cookie secara manual lewat JavaScript
-        document.cookie = `token=${token}; path=/; max-age=86400; SameSite=Lax`;
+        // 2. LOGIKA PENYIMPANAN SEDERHANA
+        if (rememberMe) {
+            // Checkbox Dicentang -> Masuk LocalStorage (Awet)
+            console.log("💾 Saving to LocalStorage (Remember Me)");
+            localStorage.setItem("token", token);
+            localStorage.setItem("user", JSON.stringify(user));
+        } else {
+            // Tidak Dicentang -> Masuk SessionStorage (Hilang saat tutup)
+            console.log("💾 Saving to SessionStorage (Temporary)");
+            sessionStorage.setItem("token", token);
+            sessionStorage.setItem("user", JSON.stringify(user));
+        }
 
-        // 3. TUNGGU SEBENTAR SEBELUM REDIRECT
-        // Beri waktu browser menyimpan data agar AuthGuard tidak "kaget"
-        setTimeout(() => {
-             // Pakai window.location.href agar halaman refresh total (Reload State)
-             window.location.href = "/dashboard";
-        }, 500);
+        // 3. REDIRECT
+        // Kita pakai replace agar user tidak bisa klik 'Back' ke login
+        console.log("🚀 Redirecting to Dashboard...");
+        router.replace("/dashboard"); 
         
-        return; // Stop eksekusi
-    }
+        // JANGAN pakai window.location.href dulu biar kita lihat log-nya
+        // router.replace lebih cepat di Next.js
+        return;
+      }
 
     } catch (err: any) {
+       console.error("Login Error:", err);
        const errorMessage = err.response?.data?.message || err.message || "Login failed";
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
+       setError(errorMessage);
+       setLoading(false);
     }
   };
 

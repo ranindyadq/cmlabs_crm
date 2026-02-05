@@ -1,6 +1,8 @@
 "use client"
 
 import React, { useMemo, useState, useEffect } from "react"
+import { useRouter } from "next/navigation"; 
+import apiClient from "@/lib/apiClient";
 import {
   Search,
   Plus,
@@ -11,6 +13,7 @@ import {
   Mail,
   Users,
   ArrowRight,
+  Ellipsis,
 } from "lucide-react"
 import AddTeamModal from "./AddTeamModal"
 import Link from "next/link";
@@ -24,11 +27,11 @@ interface TeamMember {
   email: string;
   status: string;
   photo?: string;
-  workInfo?: {
-    roleTitle?: string;
-    department?: string;
-    joinedAt?: string;
-  }
+  // Field Datar Baru
+  roleName: string;
+  roleTitle: string;
+  department: string;
+  joinedAt?: string;
 }
 
 const STATUS: Record<string, { label: string; color: string }> = {
@@ -49,6 +52,30 @@ export default function TeamPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const router = useRouter();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    const checkAccess = async () => {
+      try {
+        // Panggil endpoint profile yang baru kamu buat
+        const res = await apiClient.get("/profile"); 
+        const user = res.data.data; // Sesuaikan struktur response API profile kamu
+        const roleName = (user.role?.name || user.role || "").toUpperCase();
+        // Cek Role: Jika bukan ADMIN atau OWNER, tendang!
+        // Pastikan pengecekan ini sesuai dengan data role di database kamu (misal: 'ADMIN', 'Sales', dll)
+        if (roleName !== 'ADMIN' && roleName !== 'OWNER') {
+           toast.error("Akses Ditolak: Hanya Admin yang boleh masuk.");
+           router.push('/dashboard'); 
+        } else {
+           setIsCheckingAuth(false); // Lolos!
+        }
+
+      } catch (error) {
+      }
+    };
+    checkAccess();
+  }, [router]);
 
   // Fungsi Fetch Data dari API
  const fetchTeam = async () => {
@@ -98,11 +125,15 @@ export default function TeamPage() {
     return <Circle size={12} />;
   };
 
+  if (isCheckingAuth) {
+      return <div className="h-screen flex items-center justify-center text-gray-500">Memeriksa izin akses...</div>;
+  }
+
   return (
-  <div className="space-y-6">
+  <div className="space-y-3 h-full flex flex-col">
 
     {/* === HEADER === */}
-    <div className="flex items-center justify-between mb-3">
+    <div className="flex items-center justify-between mb-1">
       <div>
         <h1 className="text-xl font-semibold text-[#2E2E2E]">Team Management</h1>
       </div>
@@ -139,24 +170,32 @@ export default function TeamPage() {
     {loading ? (
         <div className="text-center py-10 text-gray-500">Loading team data...</div>
       ) : (
-    <div className="grid grid-cols-4 gap-4">
-      {members.map((m) => (
-        <div
-          key={m.id}
-          className="relative bg-white rounded-xl shadow-sm border border-gray-100 p-4"
-        >
-
-          {/* Status Badge (INSIDE card, NOT floating) */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1 overflow-y-auto content-start">
+    {members.map((m) => (
+      <div
+        key={m.id}
+      className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col gap-3 h-fit hover:shadow-md transition-shadow"      >
+        {/* 1. BARIS HEADER: Badge (Kiri) & Ellipsis (Kanan) */}
+        <div className="flex items-center justify-between w-full mb-2">
           <div
-            className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full mb-3"
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full"
             style={{
-              backgroundColor: hexWithAlpha(STATUS[m.status?.toLowerCase()]?.color || "#137337", "22"),
-                color: STATUS[m.status?.toLowerCase()]?.color || "#137337",
+              backgroundColor: hexWithAlpha(STATUS[m.status?.toLowerCase()]?.color || "#137337", "15"),
+              color: STATUS[m.status?.toLowerCase()]?.color || "#137337",
             }}
           >
-            {statusIcon(m.status)}
+            <div 
+              className="w-1.5 h-1.5 rounded-full" 
+              style={{ backgroundColor: STATUS[m.status?.toLowerCase()]?.color || "#137337" }} 
+            />
             <span>{STATUS[m.status?.toLowerCase()]?.label || m.status}</span>
           </div>
+
+          {/* IKON TITIK TIGA DI POJOK KANAN ATAS */}
+          <button className="text-gray-400 hover:text-gray-600 transition-colors p-1">
+            <Ellipsis size={20} />
+          </button>
+        </div>
 
           <div className="flex flex-col items-center gap-3">
             <div
@@ -171,7 +210,9 @@ export default function TeamPage() {
 
             <div className="text-center">
               <div className="text-base font-semibold text-gray-900">{m.fullName}</div>
-              <div className="text-xs text-gray-500">{m.workInfo?.roleTitle || "No Role"}</div>
+              <div className="text-xs text-gray-500 font-medium">
+                {m.roleTitle || "Staff"}
+              </div>
             </div>
 
             <div className="w-full">
@@ -180,22 +221,26 @@ export default function TeamPage() {
                   <Mail size={12} /> <span className="truncate">{m.email}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-xs">
-                  <Users size={12} /> {m.workInfo?.department || "No Dept"}
+                  <Users size={12} /> <span>{m.department || "General"}</span>
                 </div>
               </div>
             </div>
 
-            <div className="w-full flex items-center justify-between text-[11px] text-gray-500 mt-2">
-              <span>Joined {m.workInfo?.joinedAt ? new Date(m.workInfo.joinedAt).toLocaleDateString() : "-"}</span>
-              <Link
-                href={`/team/${m.id}`}
-                className="flex items-center gap-1 text-gray-700 text-xs hover:underline"
-              >
-                View
-                <ArrowRight size={12} />
-              </Link>
-                </div>
-              </div>
+            <div className="w-full flex items-center justify-between text-[9px] text-gray-400 mt-4 pt-1">
+        <span>
+          Joined {m.joinedAt 
+            ? new Date(m.joinedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) 
+            : "-"} 
+        </span>
+        <Link
+          href={`/team/${m.id}`}
+          className="flex items-center gap-1 text-gray-500 font-semibold hover:underline"
+        >
+          View Details
+          <ArrowRight size={12} />
+        </Link>
+      </div>
+      </div>
             </div>
           ))}
         </div>

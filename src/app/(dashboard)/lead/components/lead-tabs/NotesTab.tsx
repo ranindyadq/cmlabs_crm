@@ -31,7 +31,6 @@ import { Plus, Trash2, Calendar, FileText, Edit, ImageIcon } from "lucide-react"
 
   const fetchNotes = async () => {
     try {
-      onRefresh?.();
       setLoading(true);
       const res = await apiClient.get(`/leads/${leadId}?activity_type=NOTE`);
       setNotes(res.data.data.notes || []);
@@ -64,7 +63,7 @@ import { Plus, Trash2, Calendar, FileText, Edit, ImageIcon } from "lucide-react"
       console.log("To endpoint:", `/notes/${leadId}`);
       
       // Gunakan endpoint /api/notes/[leadId] sesuai backend
-      const response = await apiClient.post(`/notes/${leadId}`, payload);
+      const response = await apiClient.post(`/leads/${leadId}/notes`, payload);
       
       console.log("Response:", response);
       

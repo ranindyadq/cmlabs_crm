@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"; 
-import { Calendar, Clock, DollarSign, CircleCheck, Target, Loader2 } from "lucide-react";
+import { Calendar, Clock, DollarSign, CircleCheck, Target, Loader2, Building2, User } from "lucide-react";
 import apiClient from "@/lib/apiClient";
 
 // 1. Terima Prop memberId
@@ -7,6 +7,12 @@ export default function DealsTab({ memberId }: { memberId: string }) {
   // 2. State untuk Data Dinamis
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
+  const getProgressBarColor = (prob: number) => {
+  if (prob >= 80) return "#11b982"; // Hijau (Lime/Success) - Hampir Closing
+  if (prob >= 50) return "#5A4FB5"; // Palm Purple (Brand Color) - Peluang Bagus
+  if (prob >= 30) return "#facc15"; // Kuning - Sedang berproses
+  return "#ef4444";               // Merah - Masih sangat awal (Cold)
+};
 
   // 3. Fetch Data saat memberId berubah
   useEffect(() => {
@@ -76,23 +82,22 @@ export default function DealsTab({ memberId }: { memberId: string }) {
 
       {/* DEAL CARDS */}
       <div className="space-y-4">
-        {/* Cek jika list kosong */}
-        {list.length === 0 && <p className="text-gray-500 text-center py-10">No active deals currently.</p>}
-        
         {list.map((deal: any) => (
           <div key={deal.id} className="p-5 bg-white border border-gray-200 rounded-xl shadow-sm">
-            {/* BAGIAN ATAS CARD (JUDUL & HARGA) */}
             <div className="flex justify-between items-start">
               <div>
                 <div className="flex items-center gap-3">
                   <h3 className="font-semibold text-gray-900">{deal.title}</h3>
-                  <span className="text-xs px-3 py-1 rounded-full bg-blue-100 text-blue-700">
-                    {deal.status}
+                  {/* Tampilkan Stage sebagai badge */}
+                  <span className="text-xs px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                    {deal.status.replace("_", " ")} 
                   </span>
                 </div>
 
-                <p className="text-sm text-gray-600 mt-1">
-                  Contact: {deal.contact?.name || "Unknown"}
+                <p className="text-sm text-gray-500 mt-2 flex items-center gap-2">
+                   {deal.companyName && deal.companyName !== "Perorangan" 
+                    ? `🏢 ${deal.companyName}` 
+                    : `👤 ${deal.contactName || "Unknown"}`}
                 </p>
               </div>
 
@@ -121,10 +126,19 @@ export default function DealsTab({ memberId }: { memberId: string }) {
 
             {/* PROGRESS BAR - Pastikan ini DI DALAM card */}
             <div className="mt-4">
-              <div className="w-full h-2 bg-gray-200 rounded-full">
+              <div className="flex justify-between text-[11px] mb-1 font-medium">
+                <span className="text-gray-500 uppercase tracking-wider">Probability</span>
+                <span style={{ color: getProgressBarColor(deal.probability) }}>
+                  {deal.probability}%
+                </span>
+              </div>
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
                 <div
-                  className="h-2 bg-blue-500 rounded-full"
-                  style={{ width: `${deal.probability || 0}%` }}
+                  className="h-2 transition-all duration-500 ease-out"
+                  style={{ 
+                    width: `${deal.probability || 0}%`,
+                    backgroundColor: getProgressBarColor(deal.probability) // ✅ Panggil Fungsi Warna
+                  }}
                 ></div>
               </div>
             </div>

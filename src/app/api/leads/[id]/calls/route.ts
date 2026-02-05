@@ -9,6 +9,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const user = await getSessionUser(req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { ownerId: true } });
+    if (!lead) return NextResponse.json({ message: "Lead not found" }, { status: 404 });
+
+    // Jika user bukan ADMIN dan bukan OWNER lead ini -> Tolak
+    if (user.role !== 'ADMIN' && lead.ownerId !== user.id) {
+       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
+    
     const body = await req.json();
     const newCall = await prisma.call.create({
       data: {

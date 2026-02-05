@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import apiClient from "@/lib/apiClient";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 
 import {
   Mail,
@@ -21,53 +21,112 @@ import {
   Loader2,
 } from "lucide-react";
 
-export default function ProfileTab() {
+interface WorkInfo {
+  location?: string;
+  bio?: string;
+  skills?: string[] | string; // Bisa array atau string dari DB
+  department?: string;
+  reportsTo?: string;
+}
+
+interface UserData {
+  id: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  role?: string;
+  status?: string;
+  createdAt?: string | Date;
+  workInfo?: WorkInfo;
+}
+
+interface ProfileTabProps {
+  initialData: UserData | null;
+  onUpdateSuccess: () => void;
+}
+
+interface ProfileFormState {
+  fullName: string;
+  email: string;
+  phone: string;
+  location: string;
+  bio: string;
+  skills: string;
+  department: string;
+  role: string;
+  status: string;
+  reportsTo: string;
+  joinedDate: Date | null;
+}
+
+export default function ProfileTab({ initialData, onUpdateSuccess }: ProfileTabProps) {
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // --- 1. STATE UNTUK DATA FORM ---
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ProfileFormState>({
     fullName: "",
-    email: "", // Read-only
+    email: "",      // Tambahan
     phone: "",
     location: "",
     bio: "",
-    department: "Sales",
-    role: "", // Read-only
-    status: "Active",
-    reportsTo: "",
-    joinedDate: null as Date | null,
+    skills: "", 
+    department: "", // Tambahan
+    role: "",       // Tambahan
+    status: "", // Tambahan
+    reportsTo: "",  // Tambahan
+    joinedDate: null // Tambahan
   });
 
   const [skills, setSkills] = useState<string[]>([]);
   const [skillInput, setSkillInput] = useState("");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [savePopup, setSavePopup] = useState(false);
 
-  // --- 2. FETCH DATA SAAT MOUNT ---
+  // --- FETCH DATA ---
+  // Kita gabungkan logic: Jika ada initialData pakai itu, jika tidak fetch sendiri (opsional)
   useEffect(() => {
-    const fetchProfile = async () => {
+    const loadData = async () => {
       try {
         setLoading(true);
-        // Endpoint /api/profile yang mengembalikan data user + workInfo
-        const res = await apiClient.get("/profile"); 
-        const user = res.data.data;
+        
+        let user: UserData;
 
+        // Jika initialData dari props ada, gunakan itu. Jika tidak, fetch API.
+        if (initialData) {
+            user = initialData;
+        } else {
+            const res = await apiClient.get("/profile");
+            user = res.data.data;
+        }
+
+        // Mapping data ke Form State
         setFormData({
           fullName: user.fullName || "",
           email: user.email || "",
           phone: user.phone || "",
           location: user.workInfo?.location || "",
           bio: user.workInfo?.bio || "",
-          department: user.workInfo?.department || "Sales",
-          role: user.role || "",
+          department: user.workInfo?.department || "", 
+          role: typeof user.role === 'object' && user.role !== null 
+            ? (user.role as any).name 
+            : (user.role || ""),
           status: user.status || "Active",
           reportsTo: user.workInfo?.reportsTo || "",
           joinedDate: user.createdAt ? new Date(user.createdAt) : null,
+          skills: Array.isArray(user.workInfo?.skills) ? user.workInfo!.skills.join(", ") : (user.workInfo?.skills as string) || ""
         });
 
-        // Parsing skills dari string (DB) ke array (UI)
-        if (user.workInfo?.skills) {
-          setSkills(user.workInfo.skills.split(",").map((s: string) => s.trim()));
+        // Parsing skills untuk UI Tags
+        const rawSkills = user.workInfo?.skills;
+        if (typeof rawSkills === "string") {
+          setSkills(rawSkills.split(",").map((s: string) => s.trim()).filter(s => s !== ""));
+        } else if (Array.isArray(rawSkills)) {
+          setSkills(rawSkills);
+        } else {
+          setSkills([]);
         }
+
       } catch (error) {
         console.error("Gagal load profil:", error);
         toast.error("Failed to load profile data");
@@ -76,38 +135,57 @@ export default function ProfileTab() {
       }
     };
 
-    fetchProfile();
-  }, []);
+    loadData();
+  }, [initialData]);
 
   // --- 3. LOGIKA SAVE KE BACKEND ---
-  const handleSave = async () => {
-    try {
-      setSaving(true);
-      const payload = {
-        fullName: formData.fullName,
-        phone: formData.phone,
-        bio: formData.bio,
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    // Siapkan payload (gabungkan skills array jadi string untuk dikirim ke API jika API butuh string)
+    // Atau kirim form data apa adanya sesuai kebutuhan backend
+    const payload = {
+        // 1. Data untuk tabel User (Root)
+      fullName: formData.fullName,
+      phone: formData.phone,
+      
+      // 2. Data untuk tabel WorkInfo (Nested)
+      workInfo: {
+        department: formData.department, // Masukkan department disini
         location: formData.location,
-        skills: skills.join(", "), // Gabung array jadi string untuk DB
-      };
+        bio: formData.bio,
+        reportsTo: formData.reportsTo,
+        skills: skills.join(", "), // Skills juga masuk sini
+        }
+    };
 
-      await apiClient.patch("/profile", payload);
+    try {
+      // Pastikan endpoint benar ('/profile' atau '/api/profile' tergantung config axios kamu)
+      // Jika pakai apiClient (axios), tidak perlu await res.json()
+      await apiClient.patch("/profile", payload); 
 
+      // Tampilkan Popup Sukses custom kamu
       setSavePopup(true);
       setTimeout(() => setSavePopup(false), 2000);
-      toast.success("Profile updated!");
+
+      onUpdateSuccess(); 
+      toast.success("Profile berhasil diperbarui!"); 
+      
     } catch (error: any) {
-      console.error("Gagal update profil:", error);
-      const msg = error.response?.data?.message || "Failed to update profile";
+      console.error(error);
+      const msg = error?.response?.data?.message || "Terjadi kesalahan sistem";
       toast.error(msg);
     } finally {
-      setSaving(false);
+      setIsSubmitting(false);
     }
   };
 
   // Helper change handler
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    // @ts-ignore (Kadang TS rewel soal key dynamic, ini aman)
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   // Skill Handlers
@@ -122,198 +200,269 @@ export default function ProfileTab() {
     setSkills(skills.filter((s) => s !== skillToRemove));
   };
 
-  if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#5A4FB5]" /></div>;
+  if (loading)
+    return (
+      <div className="p-10 flex justify-center">
+        <Loader2 className="animate-spin text-[#5A4FB5]" />
+      </div>
+    );
 
   return (
-    <div className="w-full px-6 py-1">
-      <div className="grid grid-cols-2 gap-8">
+    <div className="w-full">
+      {/* Header Sections */}
+      <div className="grid grid-cols-2 gap-6 mb-6">
+        {/* Basic Information Header */}
+        <div className="flex items-center gap-2">
+          <User className="text-gray-700 w-5 h-5" />
+          <h3 className="font-semibold text-gray-800 text-base">
+            Basic Information
+          </h3>
+        </div>
 
-        {/* BASIC INFORMATION */}
+        {/* Work Information Header */}
+        <div className="flex items-center gap-2">
+          <BriefcaseBusiness className="text-gray-700 w-5 h-5" />
+          <h3 className="font-semibold text-gray-800 text-base">
+            Work Information
+          </h3>
+        </div>
+      </div>
+
+      {/* Form Grid */}
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+        {/* LEFT COLUMN - BASIC INFORMATION */}
+        
+        {/* Fullname */}
         <div>
-          <div className="flex items-center gap-2 mb-4">
-            <User className="text-gray-700 w-5 h-5" />
-            <h3 className="font-semibold text-gray-700 text-[17px]">
-              Basic Information
-            </h3>
-          </div>
-
-          {/* Fullname */}
-          <label className="text-sm font-medium">Fullname</label>
-          <div className="relative mt-1 mb-3">
-            <User size={16} className="absolute left-3 top-3 text-gray-500" />
+          <label className="text-sm font-medium text-gray-700 block mb-1.5">
+            Fullname
+          </label>
+          <div className="relative">
+            <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
-              name="fullName" // Harus sama dengan key di state
+              name="fullName"
               value={formData.fullName}
-              onChange={(e) => setFormData({...formData, fullName: e.target.value})}
-              placeholder="Full Name"
-              className="w-full border border-gray-300 rounded-lg py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
+              onChange={(e) =>
+                setFormData({ ...formData, fullName: e.target.value })
+              }
+              placeholder=""
+              className="w-full border border-gray-300 rounded-lg py-2.5 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] focus:border-transparent"
             />
           </div>
+        </div>
 
-          {/* Email */}
-          <label className="text-sm font-medium">Email</label>
-          <div className="relative mt-1 mb-3">
-            <Mail size={16} className="absolute left-3 top-3 text-gray-500" />
+        {/* RIGHT COLUMN - Department */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 block mb-1.5">
+            Departemen
+          </label>
+          <div className="relative">
+            <FileText size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10" />
             <input
-              placeholder="Your email address"
-              name="email" // Harus sama dengan key di state
+              name="department"
+              value={formData.department}
+              onChange={(e) =>
+                setFormData({ ...formData, department: e.target.value })
+              }
+              placeholder=""
+              className="w-full border border-gray-300 rounded-lg py-2.5 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        {/* Email */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 block mb-1.5">
+            Email
+          </label>
+          <div className="relative">
+            <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              name="email"
               value={formData.email}
-              onChange={(e) => setFormData({...formData, email: e.target.value})}
-              disabled // <--- PENTING: Sesuai Requirement
-              className="w-full border border-gray-300 bg-gray-100 text-gray-500 rounded-lg py-2 pl-9 pr-3 text-sm cursor-not-allowed"
+              onChange={(e) =>
+                setFormData({ ...formData, email: e.target.value })
+              }
+              placeholder=""
+              disabled
+              className="w-full border border-gray-300 bg-gray-50 text-gray-500 rounded-lg py-2.5 pl-10 pr-3 text-sm cursor-not-allowed"
             />
           </div>
+        </div>
 
-          {/* Phone Number */}
-          <label className="text-sm font-medium">Phone Number</label>
-          <div className="relative mt-1 mb-3">
-            <Phone size={16} className="absolute left-3 top-3 text-gray-500" />
+        {/* Role */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 block mb-1.5">
+            Role
+          </label>
+          <div className="relative">
+            <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10" />
             <input
-              name="phone" // Harus sama dengan key di state
+              name="role"
+              value={formData.role}
+              placeholder=""
+              disabled
+              className="w-full border border-gray-300 bg-gray-50 text-gray-500 rounded-lg py-2.5 pl-10 pr-3 text-sm cursor-not-allowed"
+            />
+          </div>
+        </div>
+
+        {/* Phone Number */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 block mb-1.5">
+            Phone Number
+          </label>
+          <div className="relative">
+            <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              name="phone"
               value={formData.phone}
-              onChange={(e) => setFormData({...formData, phone: e.target.value})}
-              placeholder="Your phone number"
-              className="w-full border border-gray-300 rounded-lg py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
+              onChange={(e) =>
+                setFormData({ ...formData, phone: e.target.value })
+              }
+              placeholder=""
+              className="w-full border border-gray-300 rounded-lg py-2.5 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] focus:border-transparent"
             />
           </div>
+        </div>
 
-          {/* Location */}
-          <label className="text-sm font-medium">Location</label>
-          <div className="relative mt-1 mb-3">
-            <MapPin size={16} className="absolute left-3 top-3 text-gray-500" />
+        {/* Status */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 block mb-1.5">
+            Status
+          </label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-gray-800 text-white text-xs rounded-md z-10">
+              {formData.status}
+            </span>
             <input
-              name="location" // Harus sama dengan key di state
-              value={formData.location}
-              onChange={(e) => setFormData({...formData, location: e.target.value})}
-              placeholder="Your location"
-              className="w-full border border-gray-300 rounded-lg py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
+              value=""
+              placeholder=""
+              disabled
+              className="w-full border border-gray-300 bg-gray-50 rounded-lg py-2.5 pl-20 pr-3 text-sm cursor-not-allowed"
             />
           </div>
+        </div>
 
-          {/* Bio */}
-          <label className="text-sm font-medium">Bio</label>s
+        {/* Location */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 block mb-1.5">
+            Location
+          </label>
+          <div className="relative">
+            <MapPin size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              name="location"
+              value={formData.location}
+              onChange={(e) =>
+                setFormData({ ...formData, location: e.target.value })
+              }
+              placeholder=""
+              className="w-full border border-gray-300 rounded-lg py-2.5 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] focus:border-transparent"
+            />
+          </div>
+        </div>
+
+        {/* Joined Date */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 block mb-1.5">
+            Joined Date
+          </label>
+          <div className="relative">
+            <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-10" />
+            <DatePicker
+              selected={formData.joinedDate}
+              onChange={(date) =>
+                setFormData({ ...formData, joinedDate: date })
+              }
+              placeholderText=""
+              dateFormat="yyyy-MM-dd"
+              disabled
+              className="w-full border border-gray-300 bg-gray-50 text-gray-500 rounded-lg py-2.5 pl-10 pr-3 text-sm cursor-not-allowed"
+              wrapperClassName="w-full"
+            />
+          </div>
+        </div>
+
+        {/* Bio - spans full width */}
+        <div className="col-span-2">
+          <label className="text-sm font-medium text-gray-700 block mb-1.5">
+            Bio
+          </label>
           <textarea
             maxLength={100}
-            name="bio" // Harus sama dengan key di state
+            name="bio"
             value={formData.bio}
-            onChange={(e) => setFormData({...formData, bio: e.target.value})}
-            placeholder="Your bio"
-            className="border border-gray-300 rounded-lg w-full h-24 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
+            onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+            placeholder=""
+            className="border border-gray-300 rounded-lg w-full h-24 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] focus:border-transparent resize-none"
           />
-
           <div className="text-right text-xs text-gray-400 mt-1">
             {formData.bio.length}/100
           </div>
         </div>
 
-        {/* WORK INFORMATION */}
+        {/* Reports To - left side, bottom */}
         <div>
-          <div className="flex items-center gap-2 mb-4">
-            <BriefcaseBusiness className="text-gray-700 w-5 h-5" />
-            <h3 className="font-semibold text-gray-700 text-[17px]">
-              Work Information
-            </h3>
-          </div>
-
-          {/* Department */}
-          <label className="text-sm font-medium">Department</label>
-          <div className="relative mt-1 mb-3">
-            <FileText size={16} className="absolute left-3 top-3 text-gray-500" />
-            <select
-              className="w-full border border-gray-300 rounded-lg py-2 pl-9 pr-8 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
-            >
-              <option>Select Department</option>
-              <option>Sales</option>
-              <option>Marketing</option>
-              <option>Product</option>
-              <option>Support</option>
-              <option>Developer</option>
-            </select>
-            <ChevronDown className="absolute right-3 top-3 w-4 h-4 text-gray-500" />
-          </div>
-
-          {/* Role - dropdown */}
-         <label className="text-sm font-medium">Role</label>
-          <div className="relative mt-1 mb-3">
-            <User size={16} className="absolute left-3 top-3 text-gray-500" />
-            <select
-              disabled // <--- PENTING: User tidak boleh ganti role sendiri
-              className="w-full border border-gray-300 bg-gray-100 text-gray-500 rounded-lg py-2 pl-9 pr-8 text-sm appearance-none cursor-not-allowed"
-            >
-              <option>Sales</option> {/* Nanti ambil dari state */}
-            </select>
-          </div>
-
-          {/* Status - dropdown */}
-          <label className="text-sm font-medium">Status</label>
-          <div className="relative mt-1 mb-3">
-            <select
-              className="w-full border border-gray-300 rounded-lg py-2 pl-3 pr-8 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
-            >
-              <option>Active</option>
-              <option>Inactive</option>
-              <option>Onboarding</option>
-            </select>
-            <ChevronDown className="absolute right-3 top-3 w-4 h-4 text-gray-500" />
-          </div>
-
-          {/* Joined Date */}
-          <label className="text-sm font-medium">Joined Date</label>
-          <div className="relative mt-1 mb-3">
-            <Calendar className="absolute left-3 top-3 text-gray-500 w-4 h-4" />
-            <DatePicker
-              selected={formData.joinedDate}
-              onChange={(date) => setFormData({ ...formData, joinedDate: date })}
-              placeholderText="Select Date"
-              dateFormat="yyyy-MM-dd"
-              className="w-full border border-gray-300 rounded-lg py-2 pl-9 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
-              wrapperClassName="w-full"
-            />
-            <ChevronDown className="absolute right-3 top-3 w-4 h-4 text-gray-500" />
-          </div>
-
-          {/* Reports To */}
-          <label className="text-sm font-medium">Reports To</label>
-          <div className="relative mt-1 mb-3">
-            <Users size={16} className="absolute left-3 top-3 text-gray-500" />
+          <label className="text-sm font-medium text-gray-700 block mb-1.5">
+            Reports To
+          </label>
+          <div className="relative">
+            <Users size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
-              placeholder="..."
-              className="w-full border border-gray-300 rounded-lg py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]"
+              name="reportsTo"
+              value={formData.reportsTo}
+              onChange={(e) =>
+                setFormData({ ...formData, reportsTo: e.target.value })
+              }
+              placeholder=""
+              className="w-full border border-gray-300 rounded-lg py-2.5 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] focus:border-transparent"
             />
           </div>
+        </div>
 
-          {/* Skills */}
-          <label className="text-sm font-medium">Skills & Expertise</label>
-          <div className="flex flex-wrap gap-2 mt-1 mb-4">
+        {/* Skills & Expertise - right side, bottom */}
+        <div>
+          <label className="text-sm font-medium text-gray-700 block mb-1.5">
+            Skills & Expertise
+          </label>
+          <div className="flex flex-wrap gap-2 border border-gray-300 rounded-lg p-2 min-h-[42px]">
             {skills.map((skill) => (
               <span
                 key={skill}
                 onClick={() => removeSkill(skill)}
-                className="px-3 py-1 bg-gray-100 rounded-full text-xs cursor-pointer"
+                className="px-3 py-1 bg-gray-200 rounded-md text-xs cursor-pointer hover:bg-gray-300 transition-colors flex items-center gap-1"
               >
-                {skill} ✕
+                {skill} <span className="text-gray-500">✕</span>
               </span>
             ))}
 
             <input
               value={skillInput}
               onChange={(e) => setSkillInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSkill())}
-              placeholder="Add skill..."
-              className="px-3 py-1 text-xs border border-gray-300 rounded-full focus:outline-none w-28"
+              onKeyDown={(e) =>
+                e.key === "Enter" && (e.preventDefault(), addSkill())
+              }
+              placeholder=""
+              className="flex-1 min-w-[100px] text-xs focus:outline-none"
             />
           </div>
         </div>
       </div>
 
       {/* SAVE CHANGES BUTTON */}
-      <div className="flex justify-end mt-5">
+      <div className="flex justify-end mt-8">
         <button
-          onClick={handleSave}
-          className="px-6 py-2 rounded-full bg-[#5A4FB5] text-white text-sm font-medium flex items-center gap-2"
+          onClick={handleSubmit} 
+          disabled={isSubmitting}
+          className="px-6 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Save size={16} className="text-white" />
-          Save Changes
+          {isSubmitting ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <Save size={16} />
+          )}
+          {isSubmitting ? "Saving..." : "Save Changes"}
         </button>
       </div>
 
@@ -326,7 +475,9 @@ export default function ProfileTab() {
             </div>
 
             <h3 className="text-lg font-semibold">Saved</h3>
-            <p className="text-sm text-gray-600 mt-1">Changes have been updated</p>
+            <p className="text-sm text-gray-600 mt-1">
+              Changes have been updated
+            </p>
           </div>
         </div>
       )}

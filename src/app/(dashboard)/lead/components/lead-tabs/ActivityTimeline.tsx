@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import apiClient from "@/lib/apiClient";
-import { Phone, NotebookPen, Filter, Plus, X, Video, Mail, FileText } from "lucide-react";
+import { Phone, NotebookPen, Filter, Plus, X, Video, Mail, FileText, Receipt } from "lucide-react";
 
 export default function ActivityTimeline({ 
   leadId, 
@@ -18,7 +18,6 @@ export default function ActivityTimeline({
   // 1. FETCH SEMUA AKTIVITAS
   const fetchTimeline = async () => {
     try {
-      onRefresh?.();
       setLoading(true);
       // Kita panggil detail lead, backend biasanya sudah include relasi (notes, meetings, dll)
       // Jika backend Anda memisahkan, Anda mungkin perlu Promise.all() ke beberapa endpoint.
@@ -33,6 +32,12 @@ export default function ActivityTimeline({
         ...(data.meetings || []).map((i: any) => ({ ...i, type: "MEETING", date: i.startTime })),
         ...(data.calls || []).map((i: any) => ({ ...i, type: "CALL", date: i.callTime })),
         ...(data.emails || []).map((i: any) => ({ ...i, type: "EMAIL", date: i.sentAt })),
+        ...(data.activities || []).map((i: any) => ({ 
+            ...i, 
+            type: i.type, // "INVOICE_CREATED", "LOG", dll
+            date: i.createdAt,
+            title: i.type === 'INVOICE_CREATED' ? 'Invoice Created' : 'Activity Log' 
+        })),
       ];
 
       // Sort Descending (Terbaru di atas)
@@ -57,6 +62,7 @@ export default function ActivityTimeline({
       case "MEETING": return <Video className="w-4 h-4" />;
       case "CALL": return <Phone className="w-4 h-4" />;
       case "EMAIL": return <Mail className="w-4 h-4" />;
+      case "INVOICE_CREATED": return <Receipt className="w-4 h-4" />;
       default: return <FileText className="w-4 h-4" />;
     }
   };
@@ -106,6 +112,11 @@ export default function ActivityTimeline({
                   )}
                   {item.type === "CALL" && item.notes}
                   {item.type === "EMAIL" && item.body}
+                  {item.type === "INVOICE_CREATED" && (
+                    <span className="text-gray-700 dark:text-gray-300">
+                      {item.description}
+                    </span>
+                  )}
               </p>
               
               {/* Info Tambahan Kecil */}

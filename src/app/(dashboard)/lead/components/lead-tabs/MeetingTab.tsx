@@ -36,7 +36,6 @@ export default function MeetingTab({
   // 1. FETCH MEETINGS
   const fetchMeetings = async () => {
     try {
-      onRefresh?.();
       setLoading(true);
       const res = await apiClient.get(`/leads/${leadId}?activity_type=MEETING`);
       // Backend mengembalikan object lead dengan include meetings
@@ -73,10 +72,12 @@ export default function MeetingTab({
         location,
         meetingLink: link,
         outcome,
+        reminderMinutesBefore: 5,
       });
 
       handleClose(); // Gunakan helper close
       fetchMeetings();
+      onRefresh?.();
       setTitle(""); setDescription("");
     } catch (error) {
       alert("Gagal membuat meeting");

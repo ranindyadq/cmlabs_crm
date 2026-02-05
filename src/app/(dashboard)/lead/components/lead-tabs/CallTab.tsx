@@ -31,7 +31,6 @@ export default function CallTab({  leadId,
   // 1. FETCH CALLS
   const fetchCalls = async () => {
     try {
-      onRefresh?.();
       setLoading(true);
       const res = await apiClient.get(`/leads/${leadId}?activity_type=CALL`);
       setCalls(res.data.data.calls || []);
@@ -96,6 +95,7 @@ export default function CallTab({  leadId,
 
       fetchCalls();
       resetForm();
+      onRefresh?.();
     } catch (error) {
       alert("Failed to save call log");
       console.error(error);
@@ -111,6 +111,7 @@ export default function CallTab({  leadId,
     try {
       await apiClient.delete(`/calls/${id}`);
       setCalls((prev) => prev.filter((c) => c.id !== id)); // Optimistic update
+      onRefresh?.();
     } catch (error) {
       alert("Failed to delete call");
     }
