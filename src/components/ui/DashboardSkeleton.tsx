@@ -1,6 +1,6 @@
 export default function DashboardSkeleton() {
   return (
-    <div className="h-screen flex bg-[#F5F6FA] dark:bg-[#2B265E] p-3 gap-6 overflow-hidden">
+    <div className="h-screen flex bg-[#F0F2F5] dark:bg-[#2B265E] p-3 gap-6 overflow-hidden">
       {/* === SKELETON SIDEBAR === */}
       <div className="w-64 bg-white dark:bg-[#3B3285] rounded-2xl flex flex-col py-5 px-5 shadow-md h-full animate-pulse">
         {/* Logo Area */}

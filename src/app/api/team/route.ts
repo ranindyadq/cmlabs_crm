@@ -6,19 +6,24 @@ import { getSessionUser } from "@/lib/auth-helper";
 // --- GET ALL TEAM LIST ---
 export async function GET(req: Request) {
   try {
-    // 🔒 Security Check
     const user = await getSessionUser(req);
-    // 1. Cek Login
+    
+    // 1. Cek User Null Dulu (Wajib)
     if (!user) {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // 2. Cek Role (Hanya Admin yang boleh lihat list team)
-    // Asumsi role di database tersimpan sebagai string 'ADMIN' atau object { name: 'ADMIN' }
-    // Sesuaikan logic ini dengan struktur object user Anda
-    if (!user || user.role !== 'ADMIN') { // Tambahkan role lain jika perlu
+    // 2. Ekstrak Role dengan Aman (Fix Error 'never')
+    // Kita paksa cast ke 'any' agar TS tidak rewel soal string vs object
+    const roleData = user.role as any; 
+    const userRole = typeof roleData === 'string' ? roleData : roleData?.name;
+
+    // 3. Cek Permission
+    const allowedRoles = ['ADMIN', 'OWNER', 'PROJECT MANAGER', 'PROJECT_MANAGER']; // Tambahkan variasi
+    
+    if (!userRole || !allowedRoles.includes(userRole.toUpperCase())) { 
         return NextResponse.json({ 
-            message: "Forbidden: You don't have permission to view team list." 
+            message: "Forbidden: Sales team cannot view team management." 
         }, { status: 403 });
     }
 
@@ -54,9 +59,10 @@ export async function GET(req: Request) {
           phone: true,
           photo: true,
           status: true,
-          createdAt: true, 
-          role: { select: { name: true } },     // Ambil nested
-          workInfo: { select: {                 // Ambil nested
+          createdAt: true,
+          managerId: true, // 🔥 WAJIB DITAMBAHKAN AGAR DATA MANAGER MUNCUL
+          role: { select: { name: true } },     
+          workInfo: { select: {                 
              roleTitle: true, 
              department: true,
              joinedAt: true,
@@ -81,11 +87,15 @@ export async function GET(req: Request) {
       phone: user.phone,
       status: user.status,
       photo: user.photo,
-      // FLATTEN OBJECT
       roleName: user.role?.name || "Member",
       roleTitle: user.workInfo?.roleTitle || "Staff",
       department: user.workInfo?.department || "-",
       joinedAt: user.workInfo?.joinedAt,
+      // Mapping detail lain untuk Edit Modal
+      location: user.workInfo?.location,
+      bio: user.workInfo?.bio,
+      skills: user.workInfo?.skills,
+      reportsTo: user.managerId // 🔥 PENTING: Mapping ini yang dibaca Edit Modal
     }));
     
     return NextResponse.json({ 
@@ -99,24 +109,36 @@ export async function GET(req: Request) {
     });
   } catch (error) {
     console.error("Error fetching team list:", error);
-    return NextResponse.json({ message: "Gagal mengambil data tim." }, { status: 500 });
+    return NextResponse.json({ message: "Failed to fetch team data." }, { status: 500 });
   }
 }
 
 // --- CREATE TEAM MEMBER ---
 export async function POST(req: Request) {
   try {
-    // 🔒 Security Check (Only Admin)
     const user = await getSessionUser(req);
-    if (!user || user.role.toUpperCase() !== 'ADMIN') {
-    return NextResponse.json({ message: "Forbidden: Admin access required" }, { status: 403 });
-}
+    
+    // 1. Cek User Null Dulu
+    if (!user) {
+        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+    
+    // 2. Ekstrak Role dengan Aman
+    const roleData = user.role as any;
+    const userRole = typeof roleData === 'string' ? roleData : roleData?.name;
+
+    // 3. Cek Permission (Only Admin & Owner)
+    const allowedcreators = ['ADMIN', 'OWNER'];
+
+    if (!userRole || !allowedcreators.includes(userRole.toUpperCase())) {
+       return NextResponse.json({ message: "Forbidden: Read-only access" }, { status: 403 });
+    }
 
     const body = await req.json();
     const { 
         fullName, email, password, roleName, phone, 
         department, roleTitle, 
-        bio, skills, status, location, joinedAt 
+        bio, skills, status, location, joinedAt, managerId
     } = body;
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -133,11 +155,11 @@ export async function POST(req: Request) {
 
     // Cek email duplikat
     const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) return NextResponse.json({ message: "Email sudah digunakan." }, { status: 400 });
+    if (existingUser) return NextResponse.json({ message: "Email already in use." }, { status: 400 });
 
     // Cari Role ID
     const role = await prisma.role.findUnique({ where: { name: roleName || 'SALES' } });
-    if (!role) return NextResponse.json({ message: "Role tidak valid." }, { status: 400 });
+    if (!role) return NextResponse.json({ message: "Invalid role." }, { status: 400 });
 
     // Transaksi: Buat User & WorkInfo
     const newUser = await prisma.user.create({
@@ -150,6 +172,7 @@ export async function POST(req: Request) {
         // Note: Untuk skills, pastikan di schema.prisma tipenya String[] atau Json. 
         // Jika schema-nya String, pakai: skills.join(", ")
         roleId: role.id,
+        managerId: managerId || null,
         workInfo: {
           create: {
             department: department || 'General',
@@ -171,7 +194,7 @@ export async function POST(req: Request) {
         targetId: newUser.id,
         actionType: 'CREATE_TEAM_MEMBER',
         detailsJson: {
-          message: `Admin membuat akun untuk ${fullName}`,
+          message: `Admin created account for ${fullName}`,
           initialPassword: passwordToHash, 
           role: roleName
         }
@@ -179,11 +202,11 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ 
-      message: `Berhasil! Login dengan password: ${passwordToHash}`, 
+      message: `Success! Login with password: ${passwordToHash}`, 
       data: newUser 
     }, { status: 201 });
   } catch (error) {
     console.error("Error adding team member:", error);
-    return NextResponse.json({ message: "Gagal menambahkan anggota tim." }, { status: 500 });
+    return NextResponse.json({ message: "Failed to add team member." }, { status: 500 });
   }
 }

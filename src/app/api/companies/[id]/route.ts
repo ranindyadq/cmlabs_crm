@@ -14,11 +14,14 @@ export async function GET(
     }
 
     const companyId = params.id;
+    const { searchParams } = new URL(req.url);
+    const leadsPage = parseInt(searchParams.get("leadsPage") || "1");
+    const leadsLimit = parseInt(searchParams.get("leadsLimit") || "5");
+    const leadsSkip = (leadsPage - 1) * leadsLimit;
 
     // 2. Ambil Data Company
     const company = await prisma.company.findUnique({
       where: { id: companyId },
-      // ✅ RELASI: Mengambil daftar kontak yang terhubung dengan perusahaan ini
       include: {
         contacts: {
           select: {
@@ -29,13 +32,23 @@ export async function GET(
             phone: true
           }
         },
-        // (Opsional) Jika ingin melihat Leads yang terkait dengan perusahaan ini
         leads: {
+          where: { deletedAt: null },
           select: {
             id: true,
             title: true,
             value: true,
-            status: true
+            status: true,
+            stage: true,
+            createdAt: true
+          },
+          orderBy: { createdAt: 'desc' },
+          skip: leadsSkip,
+          take: leadsLimit
+        },
+        _count: {
+          select: {
+            leads: { where: { deletedAt: null } }
           }
         }
       }
@@ -46,7 +59,18 @@ export async function GET(
       return NextResponse.json({ message: "Company not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ data: company });
+    const totalLeads = company._count?.leads || 0;
+    const totalPages = Math.ceil(totalLeads / leadsLimit);
+
+    return NextResponse.json({ 
+      data: company,
+      pagination: {
+        currentPage: leadsPage,
+        totalPages,
+        totalLeads,
+        leadsPerPage: leadsLimit
+      }
+    });
 
   } catch (error) {
     console.error("Error fetching company detail:", error);

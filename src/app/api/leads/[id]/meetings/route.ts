@@ -1,67 +1,102 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth-helper"; // <--- PASTIKAN IMPORT INI ADA
+import { getSessionUser } from "@/lib/auth-helper";
 
+// GET: Ambil List Meeting
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await getSessionUser(req);
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+
+    const meetings = await prisma.meeting.findMany({
+      where: { leadId: params.id },
+      orderBy: { startTime: 'desc' },
+      include: {
+        // 1. Organizer
+        organizer: { 
+            select: { fullName: true, email: true, photo: true }
+        },
+        
+        // 2. Attendees (Ditaruh DI DALAM include, sejajar dengan organizer)
+        attendees: {
+          select: {
+            userId: true, // Penting untuk checkbox
+            user: {
+              select: { fullName: true, email: true }
+            }
+          }
+        }
+      }
+    });
+
+    return NextResponse.json({ message: "Meetings fetched", data: meetings });
+  } catch (error) {
+    return NextResponse.json({ message: "Error fetching meetings" }, { status: 500 });
+  }
+}
+
+// POST: Buat Meeting Baru
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     const leadId = params.id;
-
-    // 1. AUTHENTICATION CHECK (Perbaikan Utama)
-    // Kita ambil user yang sedang login
     const user = await getSessionUser(request);
     
     if (!user) {
       return NextResponse.json({ message: "Unauthorized: Please login first" }, { status: 401 });
     }
 
-    const organizerId = user.id; // <--- GUNAKAN ID ASLI DARI SESSION
-
     const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { ownerId: true } });
     if (!lead) return NextResponse.json({ message: "Lead not found" }, { status: 404 });
 
-    // Jika user bukan ADMIN dan bukan OWNER lead ini -> Tolak
+    // RBAC Check
     if (user.role !== 'ADMIN' && lead.ownerId !== user.id) {
        return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
     
-    // 2. Ambil Data Body
     const body = await request.json();
-    const { 
-      title, 
-      startTime, 
-      endTime, 
-      location, 
-      meetingLink, 
-      description 
-    } = body;
 
-    // 3. Validasi
-    if (!title || !startTime) {
-      return NextResponse.json(
-        { message: "Title and Start Time are required" }, 
-        { status: 400 }
-      );
+    // Validasi
+    if (!body.title || !body.startTime || !body.endTime) {
+      return NextResponse.json({ message: "Title, Start Time, and End Time are required" }, { status: 400 });
     }
 
-    // 4. Simpan ke Database
+    const attendeeIds: string[] = body.attendeeIds || [];
+
+    // Simpan ke Database
     const newMeeting = await prisma.meeting.create({
       data: {
-        title,
-        description,
-        startTime: new Date(startTime),
-        endTime: endTime 
-        ? new Date(endTime) 
-        : new Date(new Date(startTime).getTime() + 60 * 60 * 1000),
-        location,
-        meetingLink,
-        // Relasi ke Lead
-        lead: { connect: { id: leadId } },
-        // Relasi ke User (Organizer) menggunakan ID asli
-        organizer: { connect: { id: organizerId } }, 
+        title: body.title,
+        description: body.description,
+        startTime: new Date(body.startTime),
+        endTime: new Date(body.endTime),
+        timezone: body.timezone || "Asia/Jakarta",
+        
+        location: body.location,
+        meetingLink: body.meetingLink,
+        outcome: body.outcome,
+        reminderMinutesBefore: body.reminderMinutesBefore ? parseInt(body.reminderMinutesBefore) : 15,
+        
+        // Relasi
+        leadId: leadId,
+        organizerId: user.id, // Gunakan ID dari session
+
+        attendees: {
+          create: attendeeIds.map((id) => ({
+            user: { connect: { id: id } } // Hubungkan ke ID User yang ada di tabel User
+          }))
+        }
       },
+      include: {
+        attendees: {
+          include: { user: { select: { id: true, fullName: true, email: true } } }
+        }
+      }
     });
 
     return NextResponse.json(
@@ -70,9 +105,7 @@ export async function POST(
     );
 
   } catch (error: any) {
-    // Log error detail ke Terminal VS Code (Bukan Console Browser)
-    console.error("❌ ERROR BACKEND:", error);
-    
+    console.error("❌ ERROR BACKEND MEETING:", error);
     return NextResponse.json(
       { message: "Internal server error", errorDetail: error.message },
       { status: 500 }

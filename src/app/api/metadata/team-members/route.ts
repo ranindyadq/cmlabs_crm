@@ -21,6 +21,6 @@ export async function GET() {
     return NextResponse.json({ data: members });
   } catch (error) {
     console.error("Error fetching team members for dropdown:", error);
-    return NextResponse.json({ message: "Gagal mengambil data anggota tim." }, { status: 500 });
+    return NextResponse.json({ message: "Failed to fetch team member data." }, { status: 500 });
   }
 }

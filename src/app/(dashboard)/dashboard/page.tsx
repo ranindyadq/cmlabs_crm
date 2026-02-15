@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   BarChart, Bar, XAxis, YAxis, ResponsiveContainer,
   AreaChart, Area, CartesianGrid, Tooltip,
@@ -10,28 +11,29 @@ import {
 import {
   Banknote, CreditCard, Signal, TrendingUp, TrendingDown,
   CircleCheck, CircleX, Globe, UsersRound, Filter,
-  MapPin, CalendarRange, Check, Loader2, X, Calendar, User, Tag, Layers, Download, FileText, FileSpreadsheet,
+  CalendarRange, Loader2, X, Calendar, User, Download, FileText, FileSpreadsheet,
   ArrowRight,
   CheckCircle
 } from "lucide-react";
 import apiClient from "@/lib/apiClient";
+import toast from "react-hot-toast";
 
-// --- KOMPONEN TAMBAHAN UNTUK SUMBU X (Dua Baris) ---
+// --- CUSTOM X-AXIS TICK COMPONENT (Two Lines) ---
 const CustomAxisTick = (props: any) => {
   const { x, y, payload } = props;
   
-  // Data dari backend formatnya "Jan 2025"
-  // Kita pecah menjadi ["Jan", "2025"]
+  // Data from backend format: "Jan 2025"
+  // Split into ["Jan", "2025"]
   const [month, year] = payload.value.split(" ");
 
   return (
     <g transform={`translate(${x},${y + 10})`}>
       <text x={0} y={0} dy={0} textAnchor="middle" fill="#9CA3AF" fontSize={10}>
-        {/* Baris 1: Bulan (Tebal sedikit) */}
+        {/* Line 1: Month (Slightly bold) */}
         <tspan x="0" dy="0" fontWeight="600" fill="#4B5563">
             {month}
         </tspan>
-        {/* Baris 2: Tahun (Turun 12px ke bawah) */}
+        {/* Line 2: Year (Offset 12px down) */}
         <tspan x="0" dy="12" fontSize={9}>
             {year}
         </tspan>
@@ -40,12 +42,12 @@ const CustomAxisTick = (props: any) => {
   );
 };
 
-// --- 1. KOMPONEN SKELETON (Helper) ---
+// --- 1. SKELETON COMPONENT (Helper) ---
 const Skeleton = ({ className }: { className?: string }) => (
   <div className={`animate-pulse bg-gray-200 dark:bg-gray-700 rounded-md ${className}`} />
 );
 
-// --- 2. TIPE DATA ---
+// --- 2. DATA TYPES ---
 interface FilterState {
   picId: string;
   status: string;
@@ -96,21 +98,22 @@ const formatIDR = (value: number) => {
   }).format(value);
 };
 
-// --- 4. KOMPONEN UTAMA DASHBOARD ---
+// --- 4. MAIN DASHBOARD COMPONENT ---
 export default function DashboardPage() {
-  // State Dashboard Data
+  // Dashboard Data State
   const [isLoading, setIsLoading] = useState(true);
   const [metrics, setMetrics] = useState<any>(null);
   const [charts, setCharts] = useState<any>(null);
   const [summary, setSummary] = useState<any>(null);
-  // State untuk melacak batang mana yang sedang di-hover
+  // State to track which bar is being hovered
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [activeIndex, setActiveIndex] = useState(0); // State untuk hover effect
+  const [activeIndex, setActiveIndex] = useState(0); // State for hover effect
 
-  // Tambahkan State Tab
+  // Tab State
   const [activeTab, setActiveTab] = useState("Meeting"); // Default 'Meeting'
+  const router = useRouter();
 
-  // State Filters & Export
+  // Filters & Export State
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
   const [tempFilters, setTempFilters] = useState<FilterState>(initialFilters);
@@ -121,31 +124,31 @@ export default function DashboardPage() {
   const exportRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState(false);
 
-  // 1. Tambah State Role
+  // User Role State
   const [userRole, setUserRole] = useState<string | null>(null);
 
   // --- USE EFFECTS ---
 
-  // 2. Ambil Role dari LocalStorage saat mount
+  // Get role from localStorage on mount
   useEffect(() => {
       setUserRole(localStorage.getItem('role'));
   }, []);
 
-  // 1. Load Team Members
+  // Load Team Members
   useEffect(() => {
       const fetchTeam = async () => {
         try {
           const res = await apiClient.get("/team", { params: { limit: 1000 } }); 
           setTeamMembers(res.data.data || []); 
         } catch (err) {
-          console.error("Gagal load team:", err);
+          console.error("Failed to load team:", err);
           setTeamMembers([]); 
         }
       };
       fetchTeam();
   }, []);
 
-  // 2. Click Outside Handler
+  // Click Outside Handler
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
@@ -159,7 +162,7 @@ export default function DashboardPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 3. Fetch Dashboard Data
+  // Fetch Dashboard Data
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
@@ -179,7 +182,7 @@ export default function DashboardPage() {
         setMetrics(metricsRes.data.data);
         setCharts(chartsRes.data.data);
       } catch (error) {
-        console.error("Gagal memuat data dashboard:", error);
+        console.error("Failed to load dashboard data:", error);
       } finally {
         setIsLoading(false);
       }
@@ -194,7 +197,7 @@ export default function DashboardPage() {
     setTempFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  // Helper untuk Label Dinamis
+  // Helper function for dynamic period label
   const getPeriodLabel = () => {
     const { period, startDate, endDate } = appliedFilters;
 
@@ -206,7 +209,7 @@ export default function DashboardPage() {
       return `Showing data from ${new Date(startDate).toLocaleDateString('id-ID')} to ${new Date(endDate).toLocaleDateString('id-ID')}`;
     }
     
-    // Default fallback
+    // Default: All time data
     return "Showing all time data";
   };
 
@@ -256,8 +259,8 @@ export default function DashboardPage() {
       link.parentNode?.removeChild(link);
       setIsExportOpen(false);
     } catch (error) {
-      console.error("Gagal export:", error);
-      alert("Gagal mengunduh laporan.");
+      console.error("Export failed:", error);
+      toast.error("Failed to download report.");
     } finally {
       setIsExporting(false);
       setIsExportOpen(false);
@@ -280,12 +283,12 @@ export default function DashboardPage() {
   })) || [];
 
   const onPieEnter = (_: any, index: number) => {
-  setActiveIndex(index);
+    setActiveIndex(index);
   };
   
-  // Reset state saat mouse keluar dari area chart
+  // Reset state when mouse leaves chart area
   const onPieLeave = () => {
-  setActiveIndex(-1); // -1 artinya tidak ada yang aktif (kembali normal)
+    setActiveIndex(-1); // -1 means no slice is active (back to normal)
   };
 
   const renderActiveShape = (props: any) => {
@@ -309,76 +312,76 @@ export default function DashboardPage() {
 };
 
   const PIE_COLORS = [
-  "#374151", // Abu Tua (Unknown/Others)
-  "#9CA3AF", // Abu Sedang (Ads)
-  "#D1D5DB", // Abu Terang (Referral)
-  "#A78BFA", // Ungu Muda (Social Media)
-  "#5A4FB5"  // Ungu Utama (Website)
+    "#374151", // Dark Gray (Unknown/Others)
+    "#9CA3AF", // Medium Gray (Ads)
+    "#D1D5DB", // Light Gray (Referral)
+    "#A78BFA", // Light Purple (Social Media)
+    "#5A4FB5"  // Primary Purple (Website)
   ];
 
-  // --- 2. RENDER STATIC LABEL (Posisi Terkunci) ---
-// Kita tidak menggunakan 'outerRadius' dari props karena nilainya berubah saat hover.
-// Kita hardcode radius dasar agar label "DIAM" ditempat.
-const renderCustomLabel = (props: any) => {
-  const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
-  const RADIAN = Math.PI / 180;
+  // --- RENDER STATIC LABEL (Fixed Position) ---
+  // We don't use 'outerRadius' from props because it changes on hover.
+  // We hardcode base radius so the label stays in place.
+  const renderCustomLabel = (props: any) => {
+    const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
+    const RADIAN = Math.PI / 180;
   
-  // Hitung posisi label (Sedikit lebih keluar dari tengah irisan)
-  const radius = innerRadius + (outerRadius - innerRadius) * 1.6; 
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    // Calculate label position (slightly outside the slice center)
+    const radius = innerRadius + (outerRadius - innerRadius) * 1.6; 
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
-  // Hanya tampilkan jika persentase > 5%
-  if (percent < 0.05) return null;
+    // Only show if percentage > 5%
+    if (percent < 0.05) return null;
 
-  return (
-    <g style={{ pointerEvents: 'none' }}>
-      {/* Bayangan untuk efek 3D (Shadow) */}
-      <defs>
-        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.1" />
-        </filter>
-      </defs>
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        {/* Shadow for 3D effect */}
+        <defs>
+          <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" floodOpacity="0.1" />
+          </filter>
+        </defs>
 
-      {/* Kotak Putih (Kapsul) */}
-      <rect 
-        x={x - 22} 
-        y={y - 12} 
-        width="44" 
-        height="24" 
-        rx="12" 
-        ry="12" 
-        fill="white" 
-        filter="url(#shadow)"
-      />
+        {/* White Capsule Background */}
+        <rect 
+          x={x - 22} 
+          y={y - 12} 
+          width="44" 
+          height="24" 
+          rx="12" 
+          ry="12" 
+          fill="white" 
+          filter="url(#shadow)"
+        />
       
-      {/* Teks Angka */}
-      <text 
-        x={x} 
-        y={y} 
-        dy={5} 
-        textAnchor="middle" 
-        fill="#111827" 
-        fontSize={12} 
-        fontWeight="bold"
-      >
-        {`${(percent * 100).toFixed(0)}%`}
-      </text>
-    </g>
-  );
-};
+        {/* Percentage Text */}
+        <text 
+          x={x} 
+          y={y} 
+          dy={5} 
+          textAnchor="middle" 
+          fill="#111827" 
+          fontSize={12} 
+          fontWeight="bold"
+        >
+          {`${(percent * 100).toFixed(0)}%`}
+        </text>
+      </g>
+    );
+  };
 
-// 1. Tambah State untuk Widget Data
-const [widgetsData, setWidgetsData] = useState<any>({
+  // Widget Data State
+  const [widgetsData, setWidgetsData] = useState<any>({
     recentDeals: [],
     pipelineOverview: [],
     quarterSummary: { 
     totalWon: 0, 
     avgDealSize: 0, 
     pipelineValue: 0, 
-    label: "Current Q" // Default sementara
+    label: "Current Q" // Default placeholder
     },
-    // TAMBAHKAN INI:
+    // Upcoming Activities Data
     upcomingActivities: {
         meetings: [],
         calls: [],
@@ -387,33 +390,29 @@ const [widgetsData, setWidgetsData] = useState<any>({
     }
 });
 
-// 2. Fetch di useEffect
-useEffect(() => {
-    // ... fetch dashboard metrics ...
-
-    // FETCH WIDGETS BARU
+  // Fetch Widget Data
+  useEffect(() => {
     async function fetchWidgets() {
-        try {
-            // Sesuaikan query param dengan filter yang aktif
-            const query = new URLSearchParams({ 
-                picId: appliedFilters.picId || "" 
-            }).toString();
+      try {
+        // Build query params based on active filters
+    const query = new URLSearchParams({ 
+          picId: appliedFilters.picId || "" 
+        }).toString();
             
-            const res = await apiClient.get(`/dashboard/widgets?${query}`);
+        const res = await apiClient.get(`/dashboard/widgets?${query}`);
         const json = res.data; 
-            if (json.success) {
-                setWidgetsData(json.data);
-            }
-        } catch (err) {
-            console.error(err);
+        if (json.success) {
+          setWidgetsData(json.data);
         }
+      } catch (err) {
+        console.error("Failed to fetch widgets:", err);
+      }
     }
     fetchWidgets();
-
-}, [appliedFilters]); // Re-fetch saat filter berubah
+  }, [appliedFilters]); // Re-fetch when filters change
 
   return (
-    <div className="h-full overflow-y-auto p-2 scrollbar-hide">
+    <div className="h-full overflow-y-auto p-2 no-scrollbar">
       <div className="space-y-4 animate-fadeIn pb-20">
 
         {/* HEADER DASHBOARD */}
@@ -586,7 +585,7 @@ useEffect(() => {
             </div>
 
         {/* KPI CARDS WITH SKELETON */}
-        <div className="grid grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-5">
           {/* Total Pipeline */}
           <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl shadow-md border border-gray-100 dark:border-gray-800">
             <div className="flex justify-center items-center gap-2 text-black dark:text-gray-200 text-sm">
@@ -645,14 +644,14 @@ useEffect(() => {
         </div>
 
         {/* SUB KPI */}
-        <div className="grid grid-cols-4 bg-gray-100 dark:bg-gray-800 border dark:border-gray-700 rounded-md overflow-hidden">
+        <div className="grid grid-cols-2 md:grid-cols-4 bg-gray-100 dark:bg-gray-800 border dark:border-gray-700 rounded-md overflow-hidden">
             {[
               { label: "Total Won", icon: <CircleCheck size={14} />, value: metrics?.totalWon?.count, growth: metrics?.totalWon?.growth },
               { label: "Total Lost", icon: <CircleX size={14} />, value: metrics?.totalLost?.count, growth: metrics?.totalLost?.growth },
               { label: "Total Leads", icon: <Globe size={14} />, value: metrics?.totalLeads?.count, growth: metrics?.totalLeads?.growth },
               { label: "Active Leads", icon: <UsersRound size={14} />, value: metrics?.activeDeals?.count, growth: metrics?.activeDeals?.growth }
             ].map((item, idx) => (
-              <div key={idx} className={`flex items-center h-full px-6 py-4 whitespace-nowrap ${idx !== 3 ? "border-r dark:border-gray-700" : ""}`}>
+              <div key={idx} className={`flex items-center h-full px-3 md:px-6 py-3 md:py-4 flex-wrap md:flex-nowrap ${idx !== 3 ? "border-r md:border-r dark:border-gray-700" : ""} ${idx === 1 || idx === 3 ? "" : ""}`}>
                 <span className="text-gray-800 dark:text-white mr-3">{item.icon}</span>
                     <span className="text-xs font-medium text-black dark:text-white mr-3">{item.label}</span>
                     {isLoading ? <Skeleton className="h-5 w-10 mt-1" /> : (
@@ -679,9 +678,9 @@ useEffect(() => {
             </div>
 
         {/* CHARTS SECTION */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
           {/* LEFT COL */}
-          <div className="col-span-2 flex flex-col gap-6">
+          <div className="lg:col-span-2 flex flex-col gap-4 md:gap-6">
             
             {/* Total Leads Chart */}
             <div className="bg-white dark:bg-gray-900 p-6 pl-1 rounded-2xl shadow-md border dark:border-gray-800">
@@ -699,8 +698,8 @@ useEffect(() => {
                         fontSize={11} 
                         stroke="#9CA3AF" 
                         dy={10} 
-                        interval={0}         // Paksa semua label muncul
-                        tick={<CustomAxisTick />} // 👈 Ganti tick default dengan komponen kustom kita
+                        interval={0}         // Force all labels to show
+                        tick={<CustomAxisTick />} // Replace default tick with custom component
                         height={40}
                       />
                       
@@ -716,31 +715,31 @@ useEffect(() => {
                         dataKey="leads" 
                         fill="#5A4FB5" 
                         radius={[4, 4, 4, 4]} 
-                        barSize={40} // Bar lebih lebar agar angka muat
-                        activeBar={false} // Matikan highlight default
+                        barSize={40} // Wider bar so numbers fit
+                        activeBar={false} // Disable default highlight
                         
-                        // LOGIC HOVER: Set index saat mouse masuk/keluar
+                        // HOVER LOGIC: Set index on mouse enter/leave
                         onMouseEnter={(_, index) => setHoveredIndex(index)}
                         onMouseLeave={() => setHoveredIndex(null)}
                       >
-                        {/* LabelList Kustom */}
+                        {/* Custom LabelList */}
                         <LabelList 
                           dataKey="leads" 
                           content={(props: any) => {
                             const { x, y, width, value, index } = props;
                             
-                            // HANYA RENDER JIKA INDEX COCOK (SEDANG DI-HOVER)
+                            // ONLY RENDER IF INDEX MATCHES (BEING HOVERED)
                             if (index !== hoveredIndex) return null;
 
                             return (
                               <text 
-                                x={x + width / 2} // Posisi X: Tengah-tengah batang
-                                y={y + 20}        // Posisi Y: +20 artinya TURUN ke dalam batang (Inside Top)
-                                fill="#FFFFFF"    // Warna Teks Putih (kontras dengan bar ungu)
+                                x={x + width / 2} // Position X: Center of bar
+                                y={y + 20}        // Position Y: +20 means DOWN inside the bar (Inside Top)
+                                fill="#FFFFFF"    // White text color (contrast with purple bar)
                                 textAnchor="middle" 
                                 fontSize={12} 
                                 fontWeight="bold"
-                                style={{ pointerEvents: 'none' }} // Agar tidak mengganggu mouse event
+                                style={{ pointerEvents: 'none' }} // Don't interfere with mouse events
                               >
                                 {value}
                               </text>
@@ -762,12 +761,12 @@ useEffect(() => {
                       <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={revenueData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                       <defs>
-                        {/* Gradasi untuk Estimation (Garis Gelap) */}
+                        {/* Gradient for Estimation (Dark Line) */}
                         <linearGradient id="colorEst" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#374151" stopOpacity={0.3}/>
                           <stop offset="95%" stopColor="#374151" stopOpacity={0}/>
                         </linearGradient>
-                        {/* Gradasi untuk Realisation (Garis Terang) */}
+                        {/* Gradient for Realisation (Light Line) */}
                         <linearGradient id="colorReal" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#9CA3AF" stopOpacity={0.3}/>
                           <stop offset="95%" stopColor="#9CA3AF" stopOpacity={0}/>
@@ -781,15 +780,15 @@ useEffect(() => {
                         axisLine={false} 
                         tickLine={false} 
                         dy={10} 
-                        interval={0}         // Paksa semua label muncul
-                        tick={<CustomAxisTick />} // 👈 Ganti tick default dengan komponen kustom kita
+                        interval={0}         // Force all labels to show
+                        tick={<CustomAxisTick />} // Replace default tick with custom component
                         height={40}
                       />
                       <YAxis 
                         axisLine={false} 
                         tickLine={false} 
                         tick={{ fill: '#9CA3AF', fontSize: 11 }} 
-                        tickFormatter={(value) => `${value / 1000000}M`} // Singkat angka juta
+                        tickFormatter={(value) => `${value / 1000000}M`} // Shorten million numbers
                         width={60}
                       />
                       
@@ -798,21 +797,21 @@ useEffect(() => {
                         contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
                       />
 
-                      {/* Area 1: Estimation (Layer Belakang/Atas) */}
+                      {/* Area 1: Estimation (Back/Top Layer) */}
                       <Area 
-                        type="monotone" // Kurva halus
+                        type="monotone" // Smooth curve
                         dataKey="estimation" 
-                        stroke="#374151" // Warna Abu Gelap/Hitam
+                        stroke="#374151" // Dark Gray/Black
                         strokeWidth={3}
                         fillOpacity={1} 
                         fill="url(#colorEst)" 
                       />
 
-                      {/* Area 2: Realisation (Layer Depan/Bawah) */}
+                      {/* Area 2: Realisation (Front/Bottom Layer) */}
                       <Area 
                         type="monotone" 
                         dataKey="realisation" 
-                        stroke="#9CA3AF" // Warna Abu Terang
+                        stroke="#9CA3AF" // Light Gray
                         strokeWidth={3}
                         fillOpacity={1} 
                         fill="url(#colorReal)" 
@@ -854,7 +853,7 @@ useEffect(() => {
               </div>
 
               {/* 2. ACTIVITY LIST */}
-              <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+              <div className="flex-1 overflow-y-auto space-y-3 pr-1 no-scrollbar">
                 {isLoading ? (
                    <>
                      <Skeleton className="h-16 w-full rounded-xl" />
@@ -863,9 +862,9 @@ useEffect(() => {
                 ) : (
                   <>
                   {(() => {
-                        // LOGIC PEMILIH DATA BERDASARKAN TAB
+                        // DATA SELECTOR LOGIC BASED ON TAB
                         let listData = [];
-                        let type = ""; // Helper untuk styling
+                        let type = ""; // Helper for styling
 
                         switch(activeTab) {
                             case "Meeting": 
@@ -899,7 +898,7 @@ useEffect(() => {
 
                         // RENDER LOOP
                         return listData.map((item: any) => {
-                            // Tentukan Field Data (karena beda-beda tiap tabel)
+                            // Determine Data Fields (varies per table)
                             let title = "", subtitle = "", time: string | null = "", date = "";
                             
                             if (type === 'meeting') {
@@ -920,8 +919,8 @@ useEffect(() => {
                             } else if (type === 'invoice') {
                                 title = item.invoiceNumber || "Invoice";
                                 subtitle = `Amount: ${formatIDR(item.totalAmount)}`;
-                                date = item.dueDate; // Invoice cuma punya tanggal
-                                time = null; // Tidak ada jam spesifik
+                                date = item.dueDate; // Invoice only has date
+                                time = null; // No specific time
                             }
                     return (
                                 <div key={item.id} className="group flex flex-col bg-gray-50 dark:bg-gray-800/50 hover:bg-white hover:shadow-md dark:hover:bg-gray-800 border border-transparent hover:border-gray-200 dark:hover:border-gray-700 rounded-xl p-3 transition-all duration-200 cursor-pointer">
@@ -962,7 +961,43 @@ useEffect(() => {
                 )}
               </div>
 
-              <button className="mt-4 w-full py-2.5 bg-[#333333] hover:bg-black dark:bg-gray-700 text-white rounded-xl text-xs font-semibold dark:hover:bg-gray-600 transition shadow-sm">
+              <button
+                className="mt-4 w-full py-2.5 bg-[#5A4FB5] hover:bg-[#4a409c] dark:bg-gray-700 text-white rounded-xl text-xs font-semibold dark:hover:bg-gray-600 transition shadow-sm"
+                onClick={() => {
+                  // Ambil listData sesuai tab aktif
+                  let listData = [];
+                  switch(activeTab) {
+                    case "Meeting":
+                      listData = widgetsData?.upcomingActivities?.meetings || [];
+                      break;
+                    case "Call":
+                      listData = widgetsData?.upcomingActivities?.calls || [];
+                      break;
+                    case "Email":
+                      listData = widgetsData?.upcomingActivities?.emails || [];
+                      break;
+                    case "Invoice":
+                      listData = widgetsData?.upcomingActivities?.invoices || [];
+                      break;
+                  }
+                  // Debug log
+                  if (listData.length === 1) {
+                    let leadId = listData[0]?.lead?.id || listData[0]?.leadId || listData[0]?.id;
+                    if (leadId) {
+                      let tabParam = "";
+                      if (activeTab === "Meeting") tabParam = "Meeting";
+                      else if (activeTab === "Call") tabParam = "Call";
+                      else if (activeTab === "Email") tabParam = "E-mail";
+                      else if (activeTab === "Invoice") tabParam = "Invoice";
+                      const url = `/lead/${leadId}?tab=${encodeURIComponent(tabParam)}`;
+                      router.push(url);
+                      return;
+                    }
+                  }
+                  // Jika lebih dari satu item atau tidak ada leadId, redirect ke /lead
+                  router.push("/lead");
+                }}
+              >
                 View All {activeTab}s
               </button>
             </div>
@@ -986,7 +1021,7 @@ useEffect(() => {
                                   nameKey="name" 
                                   cx="50%" 
                                   cy="45%" 
-                                  innerRadius={50} // Sebelumnya 60
+                                  innerRadius={50} // Previously 60
                                   outerRadius={70}
                                   paddingAngle={3}
                                   stroke="none"
@@ -997,7 +1032,7 @@ useEffect(() => {
                                   
                                   // Event Handlers
                                   onMouseEnter={onPieEnter}
-                                  onMouseLeave={onPieLeave} // ✅ PENTING: Reset saat mouse keluar
+                                  onMouseLeave={onPieLeave} // IMPORTANT: Reset on mouse leave
                                   animationDuration={400}
                                   animationBegin={0}
                                 >
@@ -1005,8 +1040,8 @@ useEffect(() => {
                                         <Cell 
                                           key={`cell-${index}`} 
                                           fill={PIE_COLORS[index % PIE_COLORS.length]}
-                                          // Logic Opacity: Fokus ke yang aktif, redupkan yang lain
-                                          // Jika activeIndex -1 (mouse leave), semua opacity 1
+                                          // Opacity Logic: Focus on active, dim others
+                                          // If activeIndex is -1 (mouse leave), all opacity 1
                                           opacity={activeIndex === -1 || activeIndex === index ? 1 : 0.3}
                                           style={{ transition: 'opacity 0.3s ease', outline: 'none' }}
                                         />
@@ -1054,34 +1089,48 @@ useEffect(() => {
                 <div className="flex-1 space-y-3">
                     {widgetsData.recentDeals.length > 0 ? widgetsData.recentDeals.map((deal: any, idx: number) => (
                         <div key={deal.id} className="flex justify-between items-center p-3 border border-gray-100 dark:border-gray-700 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition">
-                            <div>
-                                <p className="text-xs font-semibold text-gray-900 dark:text-white line-clamp-1">
-                                    {deal.title || `Transaction ${idx + 1}`}
-                                </p>
-                                <p className="text-[10px] font-bold text-gray-900 dark:text-gray-300 mt-0.5">
-                                    {formatIDR(deal.value)}
-                                </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {/* Status Badge Kecil */}
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                    deal.status === 'WON' ? 'bg-green-100 text-green-700' : 
-                                    deal.status === 'LOST' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-                                }`}>
-                                    {deal.status}
-                                </span>
-                                <button className="text-xs text-gray-400 hover:text-gray-600 flex items-center">
-                                    View <ArrowRight size={12} className="ml-1"/>
-                                </button>
-                            </div>
+                          <div>
+                            <p className="text-xs font-semibold text-gray-900 dark:text-white line-clamp-1">
+                              {deal.title || `Transaction ${idx + 1}`}
+                            </p>
+                            <p className="text-[10px] font-bold text-gray-900 dark:text-gray-300 mt-0.5">
+                              {formatIDR(deal.value)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {/* Status Badge Kecil */}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                              deal.status === 'WON' ? 'bg-green-100 text-green-700' : 
+                              deal.status === 'LOST' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {deal.status}
+                            </span>
+                            <button
+                              className="text-xs text-gray-400 hover:text-gray-600 flex items-center"
+                              onClick={() => {
+                              // Try to get leadId from deal.leadId, deal.lead?.id, or deal.id
+                              const leadId = deal.leadId || deal.lead?.id || deal.id;
+                              if (leadId) {
+                                router.push(`/lead/${leadId}`);
+                              } else {
+                                toast.error("No lead ID found for this deal.");
+                              }
+                              }}
+                            >
+                              View <ArrowRight size={12} className="ml-1"/>
+                            </button>
+                          </div>
                         </div>
                     )) : (
                         <div className="text-center text-gray-400 text-xs py-10">No recent deals</div>
                     )}
                 </div>
 
-                <button className="w-full mt-4 py-3 bg-[#333333] hover:bg-black text-white text-xs font-semibold rounded-xl transition">
-                    View All
+                <button 
+                  className="w-full mt-4 py-3 bg-[#5A4FB5] hover:bg-[#4a3f9a] text-white text-xs font-semibold rounded-xl transition"
+                  onClick={() => router.push('/lead')}
+                >
+                  View All
                 </button>
             </div>
 
@@ -1100,7 +1149,7 @@ useEffect(() => {
                                 <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">{item.stage}</span>
                                 <span className="text-xs text-gray-500">{item.count} deals ({item.percentage}%)</span>
                             </div>
-                            {/* Progress Bar Gelap */}
+                            {/* Dark Progress Bar */}
                             <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2.5">
                                 <div 
                                     className="bg-[#333333] dark:bg-gray-400 h-2.5 rounded-full transition-all duration-500" 
@@ -1113,8 +1162,11 @@ useEffect(() => {
                     )}
                 </div>
 
-                <button className="w-full mt-4 py-3 bg-[#333333] hover:bg-black text-white text-xs font-semibold rounded-xl transition">
-                    View All
+                <button 
+                  className="w-full mt-4 py-3 bg-[#5A4FB5] hover:bg-[#4a3f9a] text-white text-xs font-semibold rounded-xl transition"
+                  onClick={() => router.push('/lead')}
+                >
+                  View All
                 </button>
             </div>
 
@@ -1122,9 +1174,9 @@ useEffect(() => {
             {/* 3. RIGHT COLUMN (Pie Chart + Quarter Summary) */}
             <div className="flex flex-col gap-6">
                 
-                {/* A. LEAD SOURCE BREAKDOWN (Yang tadi sudah dibuat) */}
-                {/* ... (Paste komponen Pie Chart Anda di sini) ... */}
-                {/* Pastikan tinggi containernya fit */}
+                {/* A. LEAD SOURCE BREAKDOWN */}
+                {/* Pie chart component is above */}
+                {/* Container height should fit */}
 
 
                 {/* B. QUARTER SUMMARY (New Widget) */}
@@ -1145,7 +1197,6 @@ useEffect(() => {
                                     <p className="text-[10px] text-gray-500">Total Won ({widgetsData.quarterSummary.label})</p>
                                 </div>
                             </div>
-                            <ArrowRight size={14} className="text-gray-300" />
                         </div>
 
                         {/* Card 2: Avg Deal Size */}
@@ -1161,7 +1212,6 @@ useEffect(() => {
                                     <p className="text-[10px] text-gray-500">Avg Size ({widgetsData.quarterSummary.label})</p>
                                 </div>
                             </div>
-                            <ArrowRight size={14} className="text-gray-300" />
                         </div>
 
                         {/* Card 3: Active Pipeline */}
@@ -1177,7 +1227,6 @@ useEffect(() => {
                                     <p className="text-[10px] text-gray-500">Pipeline ({widgetsData.quarterSummary.label})</p>
                                 </div>
                             </div>
-                            <ArrowRight size={14} className="text-gray-300" />
                         </div>
                     </div>
                 </div>

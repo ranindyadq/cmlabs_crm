@@ -1,25 +1,47 @@
 import nodemailer from "nodemailer";
 import "dotenv/config";
+import path from "path";
 
-// Konfigurasi Transporter
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST,
-  port: parseInt(process.env.EMAIL_PORT || "465"),
-  secure: process.env.EMAIL_SECURE === "true",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// Flag untuk cek apakah email sudah dikonfigurasi
+const isEmailConfigured = () => {
+  return !!(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS);
+};
 
-// Verifikasi koneksi
-transporter.verify((error: Error | null) => {
-  if (error) {
-    console.error("❌ SMTP Connection Error:", error);
-  } else {
-    console.log("✅ Server SMTP siap mengirim email");
+// Lazy transporter - hanya dibuat saat pertama kali dibutuhkan
+let transporter: nodemailer.Transporter | null = null;
+let isVerified = false;
+
+const getTransporter = () => {
+  if (!transporter) {
+    if (!isEmailConfigured()) {
+      console.warn("⚠️ Email not configured. Set EMAIL_HOST, EMAIL_USER, EMAIL_PASS in .env");
+      return null;
+    }
+
+    transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST,
+      port: parseInt(process.env.EMAIL_PORT || "465"),
+      secure: process.env.EMAIL_SECURE === "true",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    // Verify async (tidak blocking)
+    if (!isVerified) {
+      transporter.verify()
+        .then(() => {
+          isVerified = true;
+          console.log("✅ Server SMTP siap mengirim email");
+        })
+        .catch((error) => {
+          console.error("❌ SMTP Connection Error:", error.message);
+        });
+    }
   }
-});
+  return transporter;
+};
 
 /**
  * Fungsi kirim email umum (Invoice, Notifikasi, dll)
@@ -29,9 +51,10 @@ export const sendEmail = async (
   subject: string, 
   html: string, 
   cc?: string, 
-  bcc?: string
+  bcc?: string,
+  attachmentUrl?: string | null
 ) => {
-  const mailOptions = {
+  const mailOptions: any = {
     from: `"CRM cmlabs" <${process.env.EMAIL_USER}>`,
     to,
     cc,
@@ -40,46 +63,78 @@ export const sendEmail = async (
     html,
   };
 
+  // Logika Optional: Hanya masukkan properti jika nilainya ada
+  if (cc) mailOptions.cc = cc;
+  if (bcc) mailOptions.bcc = bcc;
+
+  // LOGIKA ATTACHMENT
+  if (attachmentUrl) {
+    let filePath;
+
+    // Cek apakah ini URL eksternal (http) atau file lokal (/uploads/...)
+    if (attachmentUrl.startsWith("http")) {
+        filePath = attachmentUrl; // Gunakan URL langsung
+    } else {
+        // Jika file lokal di folder public, kita butuh Full Path Harddisk
+        // Contoh: C:/Users/Ranindya/cmlabs-crm/public/uploads/gambar.jpg
+        filePath = path.join(process.cwd(), "public", attachmentUrl);
+    }
+
+    mailOptions.attachments = [
+      {
+        path: filePath // Nodemailer akan mengambil file dari path ini
+      }
+    ];
+  }
+
   try {
-    const info = await transporter.sendMail(mailOptions);
+    const emailTransporter = getTransporter();
+    if (!emailTransporter) {
+      throw new Error("Email service not configured");
+    }
+    const info = await emailTransporter.sendMail(mailOptions);
     console.log(`✅ Email sent to ${to} (ID: ${info.messageId})`);
     return info;
   } catch (error) {
-    console.error("❌ Gagal mengirim email:", error);
-    throw new Error("Gagal mengirim email.");
+    console.error("❌ Failed to send email:", error);
+    throw new Error("Failed to send email.");
   }
 };
 
 /**
- * Fungsi kirim email reset password
+ * Function to send reset password email
  */
 export const sendResetPasswordEmail = async (email: string, link: string) => {
   const mailOptions = {
     from: `"CRM System Support" <${process.env.EMAIL_USER}>`,
     to: email,
-    subject: "Permintaan Reset Kata Sandi CRM",
+    subject: "CRM Password Reset Request",
     html: `
       <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px;">
-        <h2 style="color: #000;">Reset Kata Sandi Anda</h2>
-        <p>Kami menerima permintaan untuk mereset kata sandi akun Anda.</p>
-        <p>Silakan klik tautan di bawah ini (berlaku 1 jam):</p>
+        <h2 style="color: #000;">Reset Your Password</h2>
+        <p>We received a request to reset your account password.</p>
+        <p>Please click the link below (valid for 1 hour):</p>
         <div style="margin: 25px 0;">
           <a href="${link}"
              style="background-color: #5A4FB5; color: #fff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">
-             Atur Kata Sandi Baru
+             Set New Password
           </a>
         </div>
-        <p>Jika bukan Anda, abaikan email ini.</p>
+        <p>If this wasn't you, please ignore this email.</p>
       </div>
     `,
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
+    const emailTransporter = getTransporter();
+    if (!emailTransporter) {
+      throw new Error("Email service not configured");
+    }
+    const info = await emailTransporter.sendMail(mailOptions);
     console.log(`✅ Reset email sent to ${email}`);
     return info;
   } catch (error) {
-    console.error("❌ Gagal kirim reset password:", error);
+    console.error("❌ Failed to send reset password email:", error);
     throw error;
   }
 };

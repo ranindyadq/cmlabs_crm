@@ -1,12 +1,13 @@
-// src/app/api/calls/[id]/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma"; // Adjust based on your prisma location
+import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth-helper";
+// 1. JANGAN LUPA IMPORT ENUM
+import { CallStatus, CallDirection } from "@prisma/client";
 
 // PATCH: Update a specific Call
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
-    const { id } = params; // This is the CALL ID
+    const { id } = params; 
     const user = await getSessionUser(req);
     if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
@@ -22,26 +23,70 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
     const body = await req.json();
     
-    // Remove fields that shouldn't be updated loosely if necessary
+    // === SANITASI DATA UPDATE (SAMA SEPERTI POST) ===
+
+    // 1. Validasi Status (Jika dikirim)
+    let cleanStatus = undefined;
+    if (body.status !== undefined) {
+        if (body.status && body.status.trim() !== "") {
+            const inputStatus = body.status.toUpperCase();
+            if (Object.values(CallStatus).includes(inputStatus as CallStatus)) {
+                cleanStatus = inputStatus as CallStatus;
+            }
+        }
+    }
+
+    // 2. Validasi Direction (Jika dikirim)
+    let cleanDirection = undefined;
+    if (body.direction !== undefined) { // Cek apakah field dikirim di payload
+        if (body.direction && body.direction.trim() !== "") {
+            const inputDir = body.direction.toUpperCase();
+            if (Object.values(CallDirection).includes(inputDir as CallDirection)) {
+                cleanDirection = inputDir as CallDirection;
+            }
+        } else {
+            cleanDirection = null; // Jika string kosong, set null
+        }
+    }
+
+    // 3. Contact ID
+    let cleanContactId = undefined;
+    if (body.contactId !== undefined) {
+        cleanContactId = body.contactId && body.contactId.trim() !== "" ? body.contactId : null;
+    }
+
+    // === UPDATE DATABASE ===
     const updatedCall = await prisma.call.update({
       where: { id },
       data: {
         title: body.title,
         notes: body.notes,
-        callTime: body.callTime,
-        status: body.status,
+        callTime: body.callTime ? new Date(body.callTime) : undefined,
+        
+        // Field Angka
+        durationMinutes: body.durationMinutes ? parseInt(body.durationMinutes) : undefined,
+
+        // Field Enum & Relasi (Gunakan value yang sudah disanitasi)
+        // Jika undefined, Prisma tidak akan mengupdate field tersebut (tetap pakai data lama)
+        status: cleanStatus, 
+        direction: cleanDirection, 
+        contactId: cleanContactId,
+        
         result: body.result
       },
     });
 
     return NextResponse.json({ message: "Call updated", data: updatedCall });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Update Error:", error);
-    return NextResponse.json({ message: "Internal Error" }, { status: 500 });
+    return NextResponse.json({ 
+        message: "Internal Error",
+        error: error.message || "Database error"
+    }, { status: 500 });
   }
 }
 
-// DELETE: Remove a specific Call
+// DELETE: Remove a specific Call (Tetap sama)
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
     const { id } = params;

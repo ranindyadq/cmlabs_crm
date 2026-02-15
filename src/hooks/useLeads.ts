@@ -34,6 +34,7 @@ export interface LeadData {
   
   // Data Relasional
   owner: { fullName: string; email: string } | null;
+  contact: { name: string } | null;
   company: { name: string } | null;
   
   // Perhatikan struktur label dari Prisma (nested object)
@@ -46,6 +47,7 @@ export interface LeadData {
   
   dueDate: string | null;
   description: string | null;
+  createdAt: string | null;
 }
 
 type GroupedLeads = Record<string, LeadData[]>;
@@ -83,7 +85,7 @@ const useLeads = () => {
 
         } catch (err: any) {
             console.error("Fetch error:", err);
-            setError(err.response?.data?.message || err.message || 'Gagal memuat data leads.');
+            setError(err.response?.data?.message || err.message || 'Failed to load leads data.');
         } finally {
             setIsLoading(false);
         }

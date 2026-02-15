@@ -24,6 +24,7 @@ export default function OrganizationTab() {
 
   const [formData, setFormData] = useState({
     companyName: "",
+    tagline: "",
     addressLine1: "",
     addressLine2: "",
     city: "",
@@ -54,29 +55,37 @@ export default function OrganizationTab() {
 
   // 2. HANDLE UPLOAD LOGO
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    // Validasi ukuran (misal max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      return toast.error("Logo size too large. Max 2MB.");
-    }
+    if (file.size > 2 * 1024 * 1024) {
+      return toast.error("Logo size too large. Max 2MB.");
+    }
 
-    const uploadData = new FormData();
-    uploadData.append("photo", file); // Backend kita pakai key "photo" di route upload
+    const uploadData = new FormData();
+    uploadData.append("file", file); 
 
-    try {
-      setUploading(true);
-      // Kita pakai endpoint upload foto profile yang sudah ada karena logicnya sama (Vercel Blob)
-      const res = await apiClient.post("/profile/photo", uploadData);
-      setFormData({ ...formData, logoUrl: res.data.photoUrl });
-      toast.success("Logo uploaded!");
-    } catch (err) {
-      toast.error("Failed to upload logo.");
-    } finally {
-      setUploading(false);
-    }
-  };
+    try {
+      setUploading(true);
+      
+      // === PERBAIKAN DI SINI ===
+      // Tambahkan headers agar backend tahu ini adalah file upload
+      const res = await apiClient.post("/organization/logo", uploadData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      // =========================
+
+      setFormData({ ...formData, logoUrl: res.data.photoUrl });
+      toast.success("Logo uploaded!");
+    } catch (err) {
+      console.error(err); // Agar error terlihat di console browser
+      toast.error("Failed to upload logo.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // 3. HANDLE SAVE DATA
   const handleSave = async () => {
@@ -95,28 +104,32 @@ export default function OrganizationTab() {
     }
   };
 
-  if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-[#5A4FB5]" /></div>;
-
   return (
-    <div className="w-full px-6 py-1 pb-10">
-      <div className="flex items-center gap-2 mb-6">
-        <Building size={22} className="text-gray-700" />
-        <div>
-          <h2 className="text-[17px] font-semibold text-gray-800">Organization Settings</h2>
-          <p className="text-sm text-gray-500">Update company identity and invoice branding</p>
+    <div className="w-full h-full">
+      <div className="mb-6">
+      <div className="flex items-center gap-2 mb-1">
+        <Building className="w-5 h-5 text-gray-700" />
+          <h2 className="text-[16px] font-semibold text-gray-800">Organization Settings</h2>
         </div>
+          <p className="text-[12px] text-gray-500">Update company identity and invoice branding</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         
         {/* LEFT COL: BRANDING */}
-        <div className="space-y-6">
+        <div className="space-y-8">
           <div>
             <label className="text-sm font-medium text-gray-700 block mb-3">Company Logo</label>
             <div className="flex items-center gap-5">
               <div className="relative w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50">
                 {formData.logoUrl ? (
-                  <Image src={formData.logoUrl} alt="Logo" fill className="object-contain p-2" />
+                  <Image 
+                    src={formData.logoUrl} 
+                    alt="Logo" 
+                    fill 
+                    sizes="(max-width: 768px) 100vw, 150px"
+                    className="object-contain p-2" 
+                  />
                 ) : (
                   <ImageIcon className="text-gray-300" size={32} />
                 )}
@@ -134,6 +147,13 @@ export default function OrganizationTab() {
           <div className="space-y-4">
             <InputGroup label="Company Name" icon={<Building size={16}/>} value={formData.companyName} 
               onChange={(v) => setFormData({...formData, companyName: v})} />
+
+            <InputGroup 
+              label="Tagline / Slogan" 
+              icon={<FileCheck size={16}/>} // Icon bebas
+              value={formData.tagline} 
+              onChange={(v) => setFormData({...formData, tagline: v})} 
+            />
             
             <InputGroup label="Official Email" icon={<Mail size={16}/>} value={formData.email} 
               onChange={(v) => setFormData({...formData, email: v})} />
@@ -179,8 +199,8 @@ export default function OrganizationTab() {
           disabled={saving || uploading}
           className="px-8 py-2.5 rounded-full bg-[#5A4FB5] text-white text-sm font-semibold flex items-center gap-2 hover:bg-[#4a4194] transition-all shadow-md disabled:opacity-50"
         >
-          {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-          {saving ? "Saving..." : "Save Organization Profile"}
+          <Save size={16} className="text-white" />
+          Save Changes
         </button>
       </div>
 
@@ -190,8 +210,8 @@ export default function OrganizationTab() {
             <div className="mx-auto w-16 h-16 rounded-full bg-green-500 flex items-center justify-center mb-4">
               <FileCheck size={32} color="white" />
             </div>
-            <h3 className="text-lg font-semibold">Profile Updated</h3>
-            <p className="text-sm text-gray-600 mt-1">Company information has been saved successfully.</p>
+            <h3 className="text-lg font-semibold">Organization Updated</h3>
+            <p className="text-sm text-gray-600 mt-1">Organization information has been saved successfully.</p>
           </div>
         </div>
       )}
@@ -208,8 +228,8 @@ function InputGroup({ label, icon, value, onChange }: InputGroupProps) {
         <div className="absolute left-3 top-2.5 text-gray-400">{icon}</div>
         <input 
           className="w-full border rounded-lg py-2 pl-10 pr-3 text-sm focus:ring-2 focus:ring-[#5A4FB5] outline-none"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={value} 
+          onChange={(e) => onChange(e.target.value)} 
         />
       </div>
     </div>

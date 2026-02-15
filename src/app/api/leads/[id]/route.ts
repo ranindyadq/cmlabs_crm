@@ -4,27 +4,24 @@ import { getSessionUser } from "@/lib/auth-helper";
 
 // ============================================================================
 // HELPER: Build Dynamic Include
-// (Digunakan untuk memuat data relasi secara dinamis berdasarkan query params)
 // ============================================================================
 const buildLeadInclude = (searchParams: URLSearchParams) => {
   const activity_search = searchParams.get('activity_search');
-  const activity_type = searchParams.get('activity_type'); // NOTE, MEETING, CALL, EMAIL
+  const activity_type = searchParams.get('activity_type');
 
-  // Filter pencarian teks di dalam aktivitas
-  const searchCondition = activity_search 
-    ? { contains: activity_search, mode: 'insensitive' as const } 
+  const searchCondition = activity_search
+    ? { contains: activity_search, mode: 'insensitive' as const }
     : undefined;
 
+  // Hapus 'activities' dari sini
   const activityWhere: any = {
-    notes: { content: searchCondition },
-    meetings: { title: searchCondition },
-    calls: { notes: searchCondition },
-    emails: { OR: [{ subject: searchCondition }, { body: searchCondition }] },
-    invoices: { invoiceNumber: searchCondition },
-    activities: { description: searchCondition },
+    notes: searchCondition ? { content: searchCondition } : undefined,
+    meetings: searchCondition ? { title: searchCondition } : undefined,
+    calls: searchCondition ? { notes: searchCondition } : undefined,
+    emails: searchCondition ? { OR: [{ subject: searchCondition }, { body: searchCondition }] } : undefined,
+    invoices: searchCondition ? { invoiceNumber: searchCondition } : undefined,
   };
 
-  // Default Include (Owner, Contact, Company, Labels, Followers)
   const includeCondition: any = {
     owner: { select: { fullName: true, email: true } },
     contact: true,
@@ -32,18 +29,17 @@ const buildLeadInclude = (searchParams: URLSearchParams) => {
     labels: { include: { label: true } },
     followers: { select: { id: true, fullName: true } },
     customFieldValues: { include: { field: true } },
+    // JANGAN tambahkan include activities di sini
   };
 
-  // Logika Filter Jenis Aktivitas
-  // Jika activity_type spesifik dipilih, hanya muat itu. Jika tidak, muat semua.
-  
+  // Logika Filter Jenis Aktivitas (Hanya include jika type sesuai atau kosong)
   if (!activity_type || activity_type === 'NOTE') {
     includeCondition.notes = { where: activityWhere.notes, orderBy: { createdAt: 'desc' } };
   }
-  
+
   if (!activity_type || activity_type === 'MEETING') {
-    includeCondition.meetings = { 
-      where: activityWhere.meetings, 
+    includeCondition.meetings = {
+      where: activityWhere.meetings,
       orderBy: { startTime: 'desc' },
       include: {
         organizer: { select: { id: true, fullName: true } },
@@ -61,10 +57,12 @@ const buildLeadInclude = (searchParams: URLSearchParams) => {
   }
 
   if (!activity_type || activity_type === 'INVOICE') {
-    includeCondition.invoices = { where: activityWhere.invoices, orderBy: { invoiceDate: 'desc' } };
+    includeCondition.invoices = { 
+      where: activityWhere.invoices, 
+      // GANTI createdAt menjadi invoiceDate
+      orderBy: { invoiceDate: 'desc' } 
+    };
   }
-
-  
 
   return includeCondition;
 };
@@ -73,65 +71,60 @@ const buildLeadInclude = (searchParams: URLSearchParams) => {
 // 1. GET LEAD BY ID (View Detail)
 // ============================================================================
 export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
+  req: Request,
+  { params }: { params: { id: string } }
 ) {
-  try {
-    const user = await getSessionUser(req);
-    if (!user) {
-      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
-    }
+  try {
+    const user = await getSessionUser(req);
+    if (!user) {
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
 
-    const id = params.id;
-    const { searchParams } = new URL(req.url);
+    const id = params.id;
+    const { searchParams } = new URL(req.url);
+    const includeCondition = buildLeadInclude(searchParams);
 
-    // Bangun query include dinamis
-    const includeCondition = buildLeadInclude(searchParams);
+    const lead = await prisma.lead.findUnique({
+      where: { id: id, deletedAt: null },
+      include: {
+        ...includeCondition,
+        _count: {
+          select: {
+            notes: true,
+            meetings: true,
+            calls: true,
+            emails: true,
+            invoices: true,
+            // Hapus activities: true di sini
+          },
+        },
+      },
+    });
 
-    // 1. Ambil data dengan include dinamis dan _count agregasi
-    const result = await prisma.lead.findUnique({
-      where: { id: id, deletedAt: null },
-      include: {
-        // Sertakan includeCondition yang dibangun dinamis
-        ...includeCondition,
-        // 🔥 Penambahan _count untuk mendapatkan jumlah aktivitas total
-        _count: {
-          select: {
-            notes: true,
-            meetings: true,
-            calls: true,
-            emails: true,
-            invoices: true,
-          },
-        },
-      },
-    });
+    if (!lead) {
+      return NextResponse.json({ message: 'Lead not found' }, { status: 404 });
+    }
 
-    const lead = result as any; // Paksa tipe ke any untuk destructuring
-
-    if (!lead) {
-      return NextResponse.json({ message: 'Lead not found' }, { status: 404 });
-    }
-
-    // Cek apakah user mem-follow lead ini (untuk UI tombol Follow)
-    // @ts-ignore
+    // Cek apakah user memfollow lead ini
+    // @ts-ignore: followers ada di includeCondition base
     const isFollowed = lead.followers?.some((f: any) => f.id === user.id) || false;
-    
-    // 🔥 Destructure _count dari object lead
+
+    // Pisahkan _count agar respons lebih rapi
     const { _count, ...leadData } = lead;
 
-    return NextResponse.json({ 
-        data: { 
-          ...leadData, 
-          isFollowed,
-          activityCounts: _count // Menyimpan hitungan ke field baru
-        } 
-    });
+    return NextResponse.json({
+      data: {
+        ...leadData,
+        value: leadData.value ? Number(leadData.value) : 0,
+        isFollowed,
+        activityCounts: _count
+      }
+    });
 
-  } catch (error) {
-    console.error("Error in getLeadById:", error);
-    return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
-  }
+  } catch (error) {
+    console.error("Error in getLeadById:", error);
+    return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
+  }
 }
 
 // ============================================================================
@@ -143,45 +136,48 @@ export async function PATCH(
 ) {
   try {
     const id = params.id;
-    
+
     // 1. Auth Check
     const user = await getSessionUser(req);
     if (!user) {
-        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // 2. Cek Data Lama (untuk validasi Owner)
-    const existingLead = await prisma.lead.findUnique({ 
-        where: { id },
-        select: { ownerId: true , stage: true }
+    // 2. Cek Data Lama
+    const existingLead = await prisma.lead.findUnique({
+      where: { id },
+      select: { ownerId: true, stage: true, contactId: true }
     });
 
     if (!existingLead) {
-        return NextResponse.json({ message: "Lead not found" }, { status: 404 });
+      return NextResponse.json({ message: "Lead not found" }, { status: 404 });
     }
-  
-    // 3. RBAC: Hanya Admin atau Owner yang boleh edit
+
+    // 3. RBAC (Admin atau Owner)
     if (user.role !== 'ADMIN' && existingLead.ownerId !== user.id) {
-       return NextResponse.json({ message: "Forbidden: You don't have permission" }, { status: 403 });
-    } 
+      return NextResponse.json({ message: "Forbidden: You don't have permission" }, { status: 403 });
+    }
 
-    // 4. Proses Data
+    // 4. Proses Body Request
     const body = await req.json();
-
-    // Simpan status lama sebelum update untuk perbandingan
-    const oldStage = existingLead.stage;
-    
-    // Siapkan object update yang bersih
     const updateData: any = { ...body };
 
-    // Hapus field yang dilarang diubah lewat endpoint ini
+    // Sanitasi field yang dilarang diubah manual
     delete updateData.id;
-    delete updateData.ownerId; 
+    delete updateData.ownerId;
     delete updateData.createdAt;
     delete updateData.deletedAt;
 
-    // MULAI LOGIKA RELASI] ---
-    // Logika untuk Company (Karena name @unique, pakai connectOrCreate)
+    // Mapping & Clean up
+    if (body.client_type) {
+      updateData.clientType = body.client_type;
+      delete updateData.client_type;
+    }
+    if (!body.priority) delete updateData.priority;
+
+    // --- LOGIKA RELASI UTAMA (Disimpan di updateData untuk update Lead) ---
+
+    // A. Company
     if (body.company_name) {
       updateData.company = {
         connectOrCreate: {
@@ -192,16 +188,13 @@ export async function PATCH(
     } else if (body.company_name === "") {
       updateData.company = { disconnect: true };
     }
-    // Hapus properti string agar tidak error di prisma update
     delete updateData.company_name;
 
-    // Logika untuk Contact (Karena name TIDAK @unique, pakai Manual Check)
+    // B. Contact Name (Link Orang)
     if (body.contact_name) {
-      // Cek dulu apakah kontak sudah ada
       const existingContact = await prisma.contact.findFirst({
         where: { name: body.contact_name },
       });
-
       if (existingContact) {
         updateData.contact = { connect: { id: existingContact.id } };
       } else {
@@ -210,102 +203,103 @@ export async function PATCH(
     } else if (body.contact_name === "") {
       updateData.contact = { disconnect: true };
     }
-    // Hapus properti string agar tidak error di prisma update
     delete updateData.contact_name;
 
-    // Kita cek apakah frontend mengirim array string label, misal: ["VIP", "Urgent"]
-    let labelOperations: any[] = [];
-    
-    if (body.labels && Array.isArray(body.labels)) {
-        // 1. Hapus semua label yang nempel di Lead ini sebelumnya (Reset)
-        labelOperations.push(
-            prisma.leadLabel.deleteMany({
-                where: { leadId: id }
-            })
-        );
+    // C. Ambil data detail kontak (Phone/Email) tapi hapus dari updateData Lead
+    const contactPhone = body.contact_phone;
+    const contactEmail = body.contact_email;
+    delete updateData.contact_phone;
+    delete updateData.contact_email;
 
-        // 2. Loop setiap nama label untuk dipasang ulang
-        for (const labelName of body.labels) {
-            // Bersihkan spasi
-            const cleanName = labelName.trim();
-            if(!cleanName) continue;
-
-            // Masukkan operasi ke antrian transaction
-            // Logikanya: Cari Labelnya (atau buat baru), lalu sambungkan via LeadLabel
-            labelOperations.push(
-                 prisma.leadLabel.create({
-                    data: {
-                        lead: { connect: { id } },
-                        label: {
-                            connectOrCreate: {
-                                where: { name: cleanName },
-                                create: { 
-                                    name: cleanName,
-                                    colorHex: "#6366f1" // Default warna (bisa diubah random)
-                                }
-                            }
-                        }
-                    }
-                 })
-            );
-        }
-    }
-    // Hapus properti labels dari updateData agar tidak error di prisma.lead.update utama
+    // D. Labels (Hapus dari updateData karena akan diproses terpisah di transaction)
+    const labels = body.labels;
     delete updateData.labels;
 
-    // Logika Otomatis Closed Date
+    // E. Otomatisasi Closed Date
     if (updateData.status) {
-      if (['WON', 'LOST'].includes(updateData.status)) {
-        updateData.closedAt = new Date();
-      } else {
-        updateData.closedAt = null; 
+      updateData.closedAt = ['WON', 'LOST'].includes(updateData.status) ? new Date() : null;
+    }
+    if (updateData.value !== undefined) {
+      updateData.value = Number(updateData.value);
+    }
+
+    // --- PERSIAPAN TRANSAKSI ---
+    const transactionOperations: any[] = [];
+
+    // 1. Operation: Update Lead Utama
+    transactionOperations.push(
+      prisma.lead.update({
+        where: { id },
+        data: updateData,
+        include: {
+          company: true,
+          contact: true,
+          labels: { include: { label: true } }
+        }
+      })
+    );
+
+    // 2. Operation: Update Detail Kontak (Phone/Email)
+    // PENTING: Hanya update jika user TIDAK mengganti kontak (contact_name kosong)
+    // Jika user mengganti contact_name, kita tidak tahu ID kontak baru sampai transaction selesai, 
+    // jadi hindari update detail kontak lama dengan data kontak baru.
+    if (!body.contact_name && existingLead.contactId && (contactPhone !== undefined || contactEmail !== undefined)) {
+      transactionOperations.push(
+        prisma.contact.update({
+          where: { id: existingLead.contactId },
+          data: { phone: contactPhone, email: contactEmail }
+        })
+      );
+    }
+
+    // 3. Operation: Labels (Delete All & Re-create)
+    if (labels && Array.isArray(labels)) {
+      // Hapus label lama
+      transactionOperations.push(
+        prisma.leadLabel.deleteMany({ where: { leadId: id } })
+      );
+
+      // Pasang label baru
+      for (const labelName of labels) {
+        const cleanName = labelName.trim();
+        if (cleanName) {
+          transactionOperations.push(
+            prisma.leadLabel.create({
+              data: {
+                lead: { connect: { id } },
+                label: {
+                  connectOrCreate: {
+                    where: { name: cleanName },
+                    create: { name: cleanName, colorHex: "#6366f1" }
+                  }
+                }
+              }
+            })
+          );
+        }
       }
     }
 
-    // [OPSIONAL] Pastikan Value aman untuk Decimal
-    if (updateData.value !== undefined) {
-        updateData.value = Number(updateData.value);
+    // 4. Operation: Audit Log (Jika Pindah Stage)
+    if (body.stage && body.stage !== existingLead.stage) {
+      transactionOperations.push(
+        prisma.auditLog.create({
+          data: {
+            actionType: "CHANGE_STAGE",
+            entityType: "LEAD",
+            entityId: id,
+            actorId: user.id,
+            detailsJson: { from: existingLead.stage, to: body.stage }
+          }
+        })
+      );
     }
 
-    // 5. Update DB & 🔥 Create Audit Log (Gunakan Transaction)
-    // Kita gabungkan update lead dengan operasi label
-    const [updatedLead] = await prisma.$transaction([
-        // A. Update data Lead utama
-        prisma.lead.update({
-            where: { id },
-            data: updateData,
-            include: {
-                company: true,
-                contact: true,
-                // Include labels agar data balik ke frontend lengkap
-                // Perhatikan struktur: Lead -> LeadLabel -> Label
-                labels: {
-                    include: {
-                        label: true 
-                    }
-                }
-            }
-        }),
+    // 5. EKSEKUSI TRANSAKSI
+    const results = await prisma.$transaction(transactionOperations);
 
-        // B. Eksekusi Operasi Label (Delete Many & Create Many)
-        ...labelOperations,
-
-        // C. Audit Logs
-        ...(body.stage && body.stage !== oldStage ? [
-             prisma.auditLog.create({
-                data: {
-                    actionType: "CHANGE_STAGE",
-                    entityType: "LEAD",
-                    entityId: id,
-                    actorId: user.id,
-                    detailsJson: { // Simpan perubahan
-                        from: oldStage,
-                        to: body.stage
-                    }
-                }
-            })
-        ] : [])
-    ]);
+    // Hasil pertama selalu Lead yang sudah diupdate
+    const updatedLead = results[0];
 
     return NextResponse.json({
       message: 'Lead updated successfully',
@@ -327,29 +321,20 @@ export async function DELETE(
 ) {
   try {
     const id = params.id;
-
-    // 1. Auth Check
     const user = await getSessionUser(req);
-    if (!user) {
-        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
+    if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 
-    // 2. Cek Data Lama
-    const existingLead = await prisma.lead.findUnique({ 
-        where: { id },
-        select: { ownerId: true }
+    const existingLead = await prisma.lead.findUnique({
+      where: { id },
+      select: { ownerId: true }
     });
 
-    if (!existingLead) {
-        return NextResponse.json({ message: "Lead not found" }, { status: 404 });
-    }
+    if (!existingLead) return NextResponse.json({ message: "Lead not found" }, { status: 404 });
 
-    // 3. RBAC: Hanya Admin atau Owner yang boleh hapus
     if (user.role !== 'ADMIN' && existingLead.ownerId !== user.id) {
-        return NextResponse.json({ message: "Forbidden: You cannot delete this lead" }, { status: 403 });
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 
-    // 4. Soft Delete (Isi deletedAt)
     await prisma.lead.update({
       where: { id },
       data: { deletedAt: new Date() },

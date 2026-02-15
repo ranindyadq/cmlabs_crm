@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     const now = new Date();
 
     if (!resetRecord || resetRecord.used || resetRecord.expiresAt.getTime() <= now.getTime()) {
-      return NextResponse.json({ message: 'Link reset tidak valid atau sudah kedaluwarsa.' }, { status: 400 });
+      return NextResponse.json({ message: 'Reset link is invalid or has expired.' }, { status: 400 });
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
@@ -50,10 +50,10 @@ export async function POST(req: Request) {
 
     await logAudit('SYSTEM', resetRecord.userId, 'PASSWORD_RESET_SUCCESS', { tokenUsed: token });
 
-    return NextResponse.json({ message: 'Kata sandi berhasil diatur ulang.' }, { status: 200 });
+    return NextResponse.json({ message: 'Password successfully reset.' }, { status: 200 });
 
   } catch (error) {
     console.error('Error in password-reset/confirm:', error);
-    return NextResponse.json({ message: 'Gagal mengatur kata sandi baru.' }, { status: 500 });
+    return NextResponse.json({ message: 'Failed to set new password.' }, { status: 500 });
   }
 }

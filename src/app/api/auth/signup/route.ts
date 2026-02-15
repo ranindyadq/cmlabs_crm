@@ -11,19 +11,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Semua kolom wajib diisi.' }, { status: 400 });
     }
     if (password.length < 6) {
-      return NextResponse.json({ message: 'Kata sandi minimal 6 karakter.' }, { status: 400 });
+      return NextResponse.json({ message: 'Password must be at least 6 characters.' }, { status: 400 });
     }
     // 1. Cek duplikasi email (LOGIKA LAMA: 409 Conflict)
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      return NextResponse.json({ message: 'Email sudah terdaftar.' }, { status: 409 });
+      return NextResponse.json({ message: 'Email already registered.' }, { status: 409 });
     }
 
     // 2. Cari Role VIEWER (LOGIKA LAMA: Wajib ada)
     const viewerRole = await prisma.role.findUnique({ where: { name: 'VIEWER' } });
     if (!viewerRole) {
       console.error('Kritikal: Role "VIEWER" tidak ditemukan.');
-      return NextResponse.json({ message: 'Kesalahan konfigurasi server.' }, { status: 500 });
+      return NextResponse.json({ message: 'Server configuration error.' }, { status: 500 });
     }
 
     // 3. Hash Password & Buat User
@@ -43,11 +43,11 @@ export async function POST(req: Request) {
     await logAudit(newUser.id, newUser.id, 'USER_SIGNUP', { method: 'email/password' });
 
     return NextResponse.json({
-      message: 'Pendaftaran berhasil. Silakan masuk ke akun Anda.',
+      message: 'Registration successful. Please sign in to your account.',
     }, { status: 201 });
 
   } catch (error) {
     console.error('Error in signUp:', error);
-    return NextResponse.json({ message: 'Terjadi kesalahan server saat pendaftaran.' }, { status: 500 });
+    return NextResponse.json({ message: 'Server error during registration.' }, { status: 500 });
   }
 }

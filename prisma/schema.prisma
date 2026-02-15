@@ -80,7 +80,6 @@ model UserWorkInfo {
   bio        String?   @db.Text // Ditambahkan sesuai Wireframe Hal 40
   skills     String[]  @default([])
   joinedAt   DateTime? @map("joined_at") // Tanggal bergabung resmi
-  reportsTo   String?
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -139,7 +138,7 @@ model Contact {
 model Lead {
   id       String  @id @default(uuid()) @map("lead_id")
   title    String
-  value       Decimal? @default(0)
+  value Decimal? @db.Decimal(19, 4) @default(0)
   currency String  @default("IDR")
   stage String?
   status          LeadStatus @default(ACTIVE)
@@ -152,6 +151,8 @@ model Lead {
   createdAt       DateTime   @default(now()) @map("created_at")
   updatedAt       DateTime   @updatedAt @map("updated_at")
   deletedAt       DateTime?  @map("deleted_at") // Soft delete leads
+  priority        Priority?   @default(HIGH)
+  clientType      ClientType? @default(NEW)
 
   // Relasi FK
   ownerId   String   @map("owner_id")
@@ -231,6 +232,7 @@ model Meeting {
   outcome               String?  @db.Text
   reminderMinutesBefore Int?     @map("reminder_minutes_before")
   reminderSent          Boolean  @default(false) @map("reminder_sent")
+  timezone    String   @default("Asia/Jakarta")
 
   leadId      String @map("lead_id")
   lead        Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -288,6 +290,7 @@ model Email {
   attachmentUrl String?   @map("attachment_url")
   sentAt        DateTime  @default(now()) @map("sent_at")
   scheduledAt   DateTime? @map("scheduled_at")
+  status        String    @default("SENT")
 
   leadId String @map("lead_id")
   lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -393,6 +396,7 @@ model AuditLog {
 model OrganizationProfile {
   id           String   @id @default(uuid())
   companyName  String
+  tagline      String?
   addressLine1 String?
   addressLine2 String?
   city         String?
@@ -449,8 +453,8 @@ enum LeadStatus {
 }
 
 enum CallDirection {
-  INCOMING
-  OUTGOING
+  INBOUND
+  OUTBOUND
 }
 
 enum CallStatus {
@@ -471,4 +475,15 @@ enum CustomFieldType {
   NUMBER
   DATE
   SELECT
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ClientType {
+  NEW
+  REPEAT
 }

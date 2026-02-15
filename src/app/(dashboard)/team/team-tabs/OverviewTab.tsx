@@ -2,16 +2,16 @@ export default function OverviewTab({ member }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-semibold">About</h3>
+        <h3 className="text-xl font-semibold">About</h3>
 
         <div className="mt-3">
           <h4 className="text-sm font-medium text-gray-700">Bio</h4>
-          <p className="text-sm text-gray-600 mt-1">{member.bio}</p>
+          <p className="text-sm text-gray-600">{member.bio}</p>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-3">
           <h4 className="text-sm font-medium text-gray-700">Skills</h4>
-          <div className="flex gap-2 flex-wrap mt-2">
+          <div className="flex gap-2 flex-wrap">
             {member.skills.map((skill: string) => (
               <span
                 key={skill}
@@ -23,11 +23,11 @@ export default function OverviewTab({ member }: any) {
           </div>
         </div>
 
-        <div className="mt-6">
+        <div className="mt-3">
           <h4 className="text-sm font-medium text-gray-700">Reports To</h4>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-500">
             {/* Jika nanti sudah ada relasi manager di member, ganti member.managerName */}
-            {member.reportsTo || "No manager assigned."}
+            {member.managerName || "No manager assigned."}
           </p>
         </div>
       </div>

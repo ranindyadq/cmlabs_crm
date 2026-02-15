@@ -96,7 +96,10 @@ export async function GET(req: Request) {
             }
             
             // Masukkan Lead ke kelompoknya
-            groupedLeads[stage].push(lead);
+            groupedLeads[stage].push({
+                ...lead,
+                value: lead.value ? Number(lead.value) : 0 
+            });
             
             // Tambahkan nilai Leads
             totalValues[stage] += Number(lead.value || 0); 

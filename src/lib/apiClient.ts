@@ -36,22 +36,31 @@ apiClient.interceptors.response.use(
   (response) => {
     return response;
   },
-  (error) => {
+  async (error) => {
     const status = error.response ? error.response.status : null;
-    
-    // --- CCTV DEBUGGING ---
-    console.log("🚨 API ERROR TERDETEKSI:", status, error.config.url);
+    const url = error.config?.url || '';
 
-    if (status === 401) {
-      console.warn("💀 Sesi berakhir (401). Menghapus Storage...");
+    // Skip redirect untuk endpoint auth (hindari infinite loop)
+    const isAuthEndpoint = url.includes('/auth/');
+
+    if (status === 401 && !isAuthEndpoint) {
+      console.warn("💀 Sesi berakhir (401). Redirect ke login...");
       
-      // Coba comment dulu baris penghapusan ini untuk mengetes
-      // localStorage.clear();  <-- JANGAN DIHAPUS DULU
-      // sessionStorage.clear(); <-- JANGAN DIHAPUS DULU
+      // Hapus token dari storage
+      localStorage.removeItem("token");
+      sessionStorage.removeItem("token");
       
-      // window.location.href = '/auth/signin';
+      // Panggil logout API untuk clear httpOnly cookie
+      try {
+        await fetch('/api/auth/logout', { method: 'POST' });
+      } catch (e) {
+        console.error("Failed to call logout API", e);
+      }
+      
+      // Redirect ke halaman login
+      window.location.href = '/auth/signin';
     }
-    // ...
+
     return Promise.reject(error);
   }
 );

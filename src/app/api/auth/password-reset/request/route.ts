@@ -36,7 +36,7 @@ export async function POST(req: Request) {
 
     // LOGIKA LAMA: Anti-Enumeration (Return 200 meski user ga ada)
     if (!user) {
-      return NextResponse.json({ message: 'Jika email terdaftar, link reset telah dikirim.' }, { status: 200 });
+      return NextResponse.json({ message: 'If the email is registered, a reset link has been sent.' }, { status: 200 });
     }
 
     // Hapus token lama
@@ -58,10 +58,10 @@ export async function POST(req: Request) {
       .then(() => logAudit('SYSTEM', user.id, 'PASSWORD_RESET_REQUEST', { tokenExpires: expiresAt }))
       .catch((err: any) => logAudit('SYSTEM', user.id, 'EMAIL_SEND_FAILED', { error: err.message }));
 
-    return NextResponse.json({ message: 'Jika email terdaftar, link reset telah dikirim.' }, { status: 200 });
+    return NextResponse.json({ message: 'If the email is registered, a reset link has been sent.' }, { status: 200 });
 
   } catch (error) {
     console.error('Error in password-reset/request:', error);
-    return NextResponse.json({ message: 'Terjadi kesalahan server.' }, { status: 500 });
+    return NextResponse.json({ message: 'Server error occurred.' }, { status: 500 });
   }
 }

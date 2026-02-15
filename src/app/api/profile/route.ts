@@ -18,12 +18,15 @@ const updateProfileSchema = z.object({
     .optional()
     .or(z.literal("")), // Boleh kosong string ""
 
+  managerId: z.string().optional().nullable(), // Bisa UUID, "", atau null
+
   workInfo: z.object({
     department: z.string().optional(),
     bio: z.string().max(100, "Bio maksimal 100 karakter").optional(),
     location: z.string().max(50).optional(),
-    reportsTo: z.string().optional(),
-    skills: z.string().optional()
+    skills: z.array(z.string()).optional(),
+    // Handle Date (Frontend mengirim string ISO atau Date object)
+    joinedAt: z.coerce.date().optional().nullable(),
     }).optional()
   // Frontend mengirim string (misal: "React, Vue"), kita validasi string
 });
@@ -39,8 +42,17 @@ export async function GET(req: Request) {
     const userData = await prisma.user.findUnique({
       where: { id: user.id },
       include: { 
-        workInfo: true, // Pastikan ini 'userWorkInfo' sesuai schema Prisma kamu
-        role: true
+        // Ambil data detail pekerjaan
+        workInfo: true, 
+        // Ambil data Role
+        role: true,
+        // Ambil data Manager (Hanya Nama & ID untuk dropdown frontend)
+        manager: {
+            select: {
+                id: true,
+                fullName: true
+            }
+        }
       },
     });
 
@@ -66,12 +78,14 @@ export async function PATCH(req: Request) {
     // Jika validasi gagal, kembalikan error 400 beserta detailnya
     if (!validation.success) {
       return NextResponse.json({ 
-        message: "Input tidak valid", 
+        message: "Invalid input", 
         errors: validation.error.format() // Memberitahu frontend field mana yang salah
       }, { status: 400 });
     }
 
-    const { fullName, phone, workInfo } = validation.data;
+    const { fullName, phone, managerId, workInfo } = validation.data;
+
+    const finalManagerId = managerId === "" ? null : managerId;
 
     // --- MULAI TRANSAKSI DATABASE ---
     await prisma.$transaction(async (tx) => {
@@ -82,33 +96,28 @@ export async function PATCH(req: Request) {
             // Hanya update jika data ada (undefined check handled by Prisma usually, 
             // tapi hasil Zod .optional() mengembalikan undefined jika tidak ada, yang aman buat Prisma)
             fullName, 
-            phone 
+            phone,
+            managerId: finalManagerId
         }
       });
-
-      const rawSkills = workInfo?.skills;
-      
-      const formattedSkills = rawSkills && typeof rawSkills === 'string' 
-        ? rawSkills.split(',').map((s: string) => s.trim()) 
-        : [];
 
       // 2. Gunakan formattedSkills di dalam query
       await tx.userWorkInfo.upsert({
         where: { userId: user.id },
         create: { 
-            user: { connect: { id: user.id } }, 
+            userId: user.id, // Relasi wajib saat create
             bio: workInfo?.bio, 
             location: workInfo?.location, 
             department: workInfo?.department, 
-            reportsTo: workInfo?.reportsTo,   
-            skills: formattedSkills
+            skills: workInfo?.skills || [], // Simpan array langsung (PostgreSQL mendukung String[])
+            joinedAt: workInfo?.joinedAt
         },
         update: { 
             bio: workInfo?.bio, 
             location: workInfo?.location, 
             department: workInfo?.department, 
-            reportsTo: workInfo?.reportsTo,   
-            skills: formattedSkills
+            skills: workInfo?.skills, // Simpan array langsung
+            joinedAt: workInfo?.joinedAt
         }
       });
 
@@ -120,7 +129,12 @@ export async function PATCH(req: Request) {
           entityId: user.id,
           actorId: user.id,
           detailsJson: {
-            changes: { fullName, phone, ...workInfo } // Data bersih yang dicatat
+            changes: { 
+                fullName, 
+                phone, 
+                managerId: finalManagerId,
+                ...workInfo 
+            }
           }
         }
       });

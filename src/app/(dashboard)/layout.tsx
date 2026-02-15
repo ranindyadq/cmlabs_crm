@@ -3,12 +3,10 @@
 import { ReactNode, useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
-  Bell,
   List,
   Search,
-  User,
   Sun,
   Moon,
   Home,
@@ -18,7 +16,8 @@ import {
   HelpCircle,
   Settings,
   LogOut,
-  ChevronDown
+  ChevronDown,
+  X
 } from "lucide-react";
 import { useTheme } from "@/lib/context/ThemeContext";
 import { SidebarProvider, useSidebar } from "@/lib/context/SidebarContext";
@@ -28,7 +27,7 @@ import apiClient from "@/lib/apiClient";
 import DashboardSkeleton from "@/components/ui/DashboardSkeleton";
 import AuthGuard from "@/components/auth/AuthGuard";
 
-// Helper kecil untuk mencari token di kedua tempat
+// Helper to get token from localStorage or sessionStorage
 function getToken() {
   if (typeof window !== "undefined") {
     return localStorage.getItem("token") || sessionStorage.getItem("token");
@@ -37,83 +36,87 @@ function getToken() {
 }
 
 const getUser = () => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("user") || sessionStorage.getItem("user");
-    }
-    return null;
-  };
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("user") || sessionStorage.getItem("user");
+  }
+  return null;
+};
 
-// --- KOMPONEN ISI LAYOUT ---
+// --- DASHBOARD CONTENT COMPONENT ---
 function DashboardContent({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
   
-  // 1. TAMBAHKAN STATE USER UNTUK DATA DINAMIS
-  const [user, setUser] = useState({ name: "User", email: "user@cmlabs.co", role: "" });
+  // 1. User state for dynamic data
+  const [user, setUser] = useState({ 
+    name: "User", 
+    email: "user@cmlabs.co", 
+    role: "", 
+    photo: "" 
+  });
 
-  // 2. FETCH DATA USER DARI LOCALSTORAGE SAAT MOUNT
+  // 2. Fetch user data on mount
   useEffect(() => {
     const loadUserData = async () => {
-        // A. Cek Data Lokal dulu (Optimistic UI)
-        // Helper getUser() Anda sudah benar (cek local || session)
-        const localData = getUser(); 
-        
-        if (localData) {
-            try {
-                const parsed = JSON.parse(localData);
-                setUser({
-                    name: parsed.name || parsed.fullName || "User",
-                    email: parsed.email || "user@cmlabs.co",
-                    role: parsed.role || ""
-                });
-            } catch (e) { console.error("Parse error", e); }
-        }
-
-        // B. Ambil Data Terbaru dari Server
+      // A. Check local data first (Optimistic UI)
+      const localData = getUser(); 
+      
+      if (localData) {
         try {
-            const token = getToken(); // Helper getToken() Anda sudah benar
-            if (token) {
-                const res = await apiClient.get("/profile");
-                const apiUser = res.data.data;
-
-                // Bersihkan object role jika perlu
-                const roleName = typeof apiUser.role === 'object' && apiUser.role !== null 
-                    ? apiUser.role.name 
-                    : apiUser.role;
-
-                // Update State UI
-                setUser({
-                    name: apiUser.fullName || "User",
-                    email: apiUser.email || "user@cmlabs.co",
-                    role: roleName || ""
-                });
-
-                // Siapkan data untuk disimpan
-                const storageData = {
-                    ...apiUser,
-                    role: roleName
-                };
-
-                // ✅ PERBAIKAN UTAMA DI SINI (LOGIKA PENYIMPANAN CERDAS)
-                // Cek: Tokennya ada di mana? Local atau Session?
-                // Kita simpan update user di tempat yang sama dengan tokennya.
-                if (localStorage.getItem("token")) {
-                    localStorage.setItem("user", JSON.stringify(storageData));
-                } else {
-                    // Jika token di session (atau tidak ada di local), simpan ke session
-                    sessionStorage.setItem("user", JSON.stringify(storageData));
-                }
-            }
-        } catch (error) {
-            console.error("Gagal load data user terbaru", error);
-            // Jika token expired (401), bisa tambahkan logic redirect login disini
+          const parsed = JSON.parse(localData);
+          setUser({
+            name: parsed.name || parsed.fullName || "User",
+            email: parsed.email || "user@cmlabs.co",
+            role: parsed.role || "",
+            photo: parsed.photo || ""
+          });
+        } catch (e) { 
+          console.error("Parse error", e); 
         }
+      }
+
+      // B. Fetch latest data from server
+      try {
+        const token = getToken();
+        if (token) {
+          const res = await apiClient.get("/profile");
+          const apiUser = res.data.data;
+
+          // Clean role object if needed
+          const roleName = typeof apiUser.role === 'object' && apiUser.role !== null 
+            ? apiUser.role.name 
+            : apiUser.role;
+
+          // Update State UI
+          setUser({
+            name: apiUser.fullName || "User",
+            email: apiUser.email || "user@cmlabs.co",
+            role: roleName || "",
+            photo: apiUser.photo || ""
+          });
+
+          // Prepare data for storage
+          const storageData = {
+            ...apiUser,
+            role: roleName
+          };
+
+          // Smart storage: save user data in the same storage as token
+          if (localStorage.getItem("token")) {
+            localStorage.setItem("user", JSON.stringify(storageData));
+          } else {
+            sessionStorage.setItem("user", JSON.stringify(storageData));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load user data", error);
+      }
     };
 
     loadUserData();
 
-    window.addEventListener("user-updated", loadUserData);
+    window.addEventListener("user-updated", loadUserData); 
     return () => window.removeEventListener("user-updated", loadUserData);
   }, []);
   
@@ -125,40 +128,44 @@ function DashboardContent({ children }: { children: ReactNode }) {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // State Data Perusahaan
-  const [companyInfo, setCompanyInfo] = useState({
-    name: "cmlabs", // Langsung set default value
-    tagline: "Level Up your SEO", // Langsung set default value
-    logo: "/LOGO CRM 1.png" 
-  });
+  // Default company values
+  const DEFAULT_COMPANY = {
+    name: "cmlabs",
+    tagline: "Level Up your SEO",
+    logo: "/LOGO CRM 1.png"
+  };
 
-  // Fetch Data Organization Profile
-  useEffect(() => {
-    const fetchOrgInfo = async () => {
-      try {
-        const res = await apiClient.get("/organization");
-        const data = res.data.data;
-        
-        // Pastikan fallback aman jika data DB null
+  const [companyInfo, setCompanyInfo] = useState(DEFAULT_COMPANY);
+
+  // Fetch organization info
+  const fetchOrgInfo = async () => {
+    try {
+      const res = await apiClient.get("/organization");
+      const data = res.data.data;
+      
+      if (data) {
         setCompanyInfo({
-          name: data?.companyName || "cmlabs",
-          // Gunakan address atau tagline field jika sudah ditambahkan ke schema
-          tagline: data?.addressLine1 ? "Level Up your SEO" : "Level Up your SEO", 
-          // Pastikan field logoUrl ada di schema, atau gunakan default
-          logo: data?.logoUrl || "/LOGO CRM 1.png" 
-        });
-      } catch (err) {
-        console.error("Gagal load info company, menggunakan default.", err);
-        // Fallback ke default cmlabs jika API gagal
-        setCompanyInfo({
-            name: "CRM cmlabs",
-            tagline: "Level Up your SEO",
-            logo: "/LOGO CRM 1.png"
+          name: data.companyName || DEFAULT_COMPANY.name,
+          tagline: data.tagline || DEFAULT_COMPANY.tagline,
+          logo: data.logoUrl || DEFAULT_COMPANY.logo 
         });
       }
-    };
-    
+    } catch (err) {
+      console.error("Failed to load company info, using defaults.", err);
+      setCompanyInfo(DEFAULT_COMPANY);
+    }
+  };
+
+  // Fetch org info on mount and listen for storage changes
+  useEffect(() => {
     fetchOrgInfo();
+
+    const handleStorageChange = () => {
+      fetchOrgInfo();
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
   // Logic Handle Search
@@ -168,7 +175,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
     }
   };
 
-  // Logic Click Outside Menu
+  // Close user menu when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
@@ -181,23 +188,37 @@ function DashboardContent({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // ✅ LOGIKA LOGOUT
+  // Close sidebar when route changes (mobile only)
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      toggleSidebar(); // Close sidebar on mobile after navigation
+    }
+  }, [pathname]);
+
+  // Prevent scroll when sidebar is open on mobile
+  useEffect(() => {
+    if (isSidebarOpen && window.innerWidth < 768) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isSidebarOpen]);
+
+  // Handle logout
   const handleLogout = async () => {
     setIsUserMenuOpen(false);
 
-    // 1. Panggil API untuk hapus Cookie (Tunggu sampai selesai)
     try {
       await apiClient.post("/auth/logout");
     } catch (error) {
       console.error("Logout API failed", error);
     }
 
-    // 2. Bersihkan Storage Browser (Untuk UI)
     localStorage.clear();
     sessionStorage.clear();
-
-    // 3. Paksa Refresh Halaman ke Signin
-    // Gunakan 'location.href' agar browser benar-benar memuat ulang state middleware
     window.location.href = "/auth/signin";
   };
 
@@ -227,252 +248,329 @@ function DashboardContent({ children }: { children: ReactNode }) {
       roles: ["ADMIN", "SALES", "VIEWER"] 
     },
   ];
+  
   const filteredNavItems = navItems.filter(item => 
      item.roles.includes(user.role) || item.roles.includes("ALL")
   );
 
   const footerItems = [
-    { name: "Get Help", icon: HelpCircle, href: "#" },
+    { name: "Get Help", icon: HelpCircle, href: "/help" },
     { name: "Setting", icon: Settings, href: "#" },
   ];
 
   return (
     <AuthGuard>
-    <div className="h-screen flex bg-[#F5F6FA] dark:bg-[#2B265E] text-[#2E2E2E] p-3 gap-5 overflow-hidden">
-      
-      {/* === SIDEBAR === */}
-      <aside 
-        className={`
-          bg-white dark:bg-[#3B3285] rounded-2xl flex flex-col justify-between py-5 shadow-md overflow-y-auto transition-all duration-300
-          ${isSidebarOpen ? "w-60 px-4" : "w-20 px-3 items-center"} 
-        `}
-      >
-        <div>
-          {/* === LOGO SECTION (DINAMIS) === */}
-          <div className={`flex items-center gap-3 mb-8 transition-all duration-300 ${!isSidebarOpen ? "justify-center" : "px-2"}`}>
+      <div className="h-screen flex bg-[#F0F2F5] dark:bg-[#2B265E] text-[#2E2E2E] p-2 sm:p-3 gap-2 sm:gap-3 lg:gap-5 overflow-hidden">
+        
+        {/* === MOBILE OVERLAY (Backdrop) === */}
+        {isSidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden animate-in fade-in duration-200"
+            onClick={toggleSidebar}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* === SIDEBAR === */}
+        <aside 
+          className={`
+            bg-white dark:bg-[#3B3285] rounded-2xl flex flex-col justify-between shadow-lg overflow-hidden transition-all duration-300 ease-in-out z-50
             
-            {/* 1. LOGO IMAGE */}
-            <Image
-              src={companyInfo.logo} 
-              alt={`${companyInfo.name} Logo`}
-              width={isSidebarOpen ? 40 : 32}
-              height={isSidebarOpen ? 40 : 32}
-              className="object-contain transition-all duration-300"
-              priority // Tambahkan priority agar logo load cepat
-            />
+            /* Mobile: Fixed sidebar (drawer from left) */
+            fixed md:relative 
+            top-2 bottom-2 left-2
+            md:top-auto md:bottom-auto md:left-auto
             
-            {/* 2. TEKS LOGO */}
-            <div 
-              className={`flex flex-col overflow-hidden transition-all duration-300 ${
-                isSidebarOpen ? "opacity-100 w-auto translate-x-0" : "opacity-0 w-0 -translate-x-5 hidden"
-              }`}
-            >
-              <h1 className="font-semibold text-lg leading-tight text-[#2E2E2E] dark:text-white whitespace-nowrap truncate max-w-[150px]" title={companyInfo.name}>
-                {companyInfo.name}
-              </h1>
+            /* Width & Transform */
+            ${isSidebarOpen 
+              ? "w-64 px-4 py-5 translate-x-0" 
+              : "w-64 px-4 py-5 -translate-x-[110%] md:translate-x-0 md:w-20 md:px-3 md:items-center"
+            }
+          `}
+        >
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
+            {/* === LOGO SECTION === */}
+            <div className={`flex items-center gap-3 mb-6 sm:mb-8 transition-all duration-300 ${!isSidebarOpen ? "justify-center" : ""}`}>
               
-              <p className="text-[10px] text-gray-500 font-medium whitespace-nowrap truncate max-w-[150px]">
-                {companyInfo.tagline}
-              </p>
+              {/* Close button - Mobile only */}
+              <button
+                onClick={toggleSidebar}
+                className="md:hidden absolute top-4 right-4 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                aria-label="Close sidebar"
+              >
+                <X size={18} className="text-gray-600 dark:text-gray-300" />
+              </button>
+
+              {/* Logo Image */}
+              <div className="relative flex-shrink-0">
+                <Image
+                  src={companyInfo.logo} 
+                  alt={`${companyInfo.name} Logo`}
+                  width={isSidebarOpen ? 40 : 32}
+                  height={isSidebarOpen ? 40 : 32}
+                  className="object-contain transition-all duration-300 rounded-md"
+                  priority 
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = "/LOGO CRM 1.png";
+                  }}
+                />
+              </div>
+              
+              {/* Logo Text */}
+              <div 
+                className={`flex flex-col overflow-hidden transition-all duration-300 ${
+                  isSidebarOpen ? "opacity-100 max-w-[180px]" : "opacity-0 max-w-0 md:hidden"
+                }`}
+              >
+                <h1 className="font-semibold text-base sm:text-lg leading-tight text-[#2E2E2E] dark:text-white truncate">
+                  {companyInfo.name}
+                </h1>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400 font-medium truncate">
+                  {companyInfo.tagline}
+                </p>
+              </div>
             </div>
+
+            {/* === NAVIGATION === */}
+            <nav className="flex flex-col gap-1.5 sm:gap-2">
+              {filteredNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname.startsWith(item.href);
+
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    onClick={() => {
+                      // Close sidebar on mobile after navigation
+                      if (window.innerWidth < 768 && isSidebarOpen) {
+                        toggleSidebar();
+                      }
+                    }}
+                    className={`
+                      flex items-center gap-3 py-2.5 sm:py-2 text-sm font-medium transition-all rounded-lg group
+                      ${isSidebarOpen ? "pl-4 pr-3" : "justify-center px-0"}
+                      ${isActive 
+                        ? "bg-[#F0F2F5] dark:bg-[#2B265E] text-[#5A4FB5] shadow-sm" 
+                        : "hover:bg-gray-50 dark:hover:bg-[#2B265E] text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white"
+                      }
+                    `}
+                    title={!isSidebarOpen ? item.name : ""}
+                  >
+                    <Icon size={20} className={isActive ? "text-[#5A4FB5]" : ""} />
+                    {isSidebarOpen && <span>{item.name}</span>}
+                    
+                    {/* Active indicator - only when collapsed */}
+                    {!isSidebarOpen && isActive && (
+                      <div className="absolute left-0 w-1 h-8 bg-[#5A4FB5] rounded-r-full" />
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
 
-          {/* === NAVIGATION === */}
-          <nav className="flex flex-col gap-2">
-            {filteredNavItems.map((item) => {
+          {/* === FOOTER SIDEBAR === */}
+          <div className={`flex flex-col gap-1.5 sm:gap-2 text-sm text-gray-700 dark:text-gray-300 pt-4 border-t border-gray-100 dark:border-gray-700 mt-4 ${isSidebarOpen ? "" : "items-center"}`}>
+            {footerItems.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname.startsWith(item.href);
-
               return (
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`
-                    flex items-center gap-3 py-2 text-sm font-medium transition rounded-lg
-                    ${isSidebarOpen ? "pl-5 pr-3 w-full" : "justify-center w-full px-0"}
-                    ${isActive 
-                      ? "bg-[#F0F2F5] text-[#5A4FB5]" 
-                      : "hover:bg-gray-50 text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-black"
-                    }
-                  `}
+                  className={`flex items-center gap-2.5 hover:text-black dark:hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-[#2B265E] ${!isSidebarOpen && "justify-center"}`}
                   title={!isSidebarOpen ? item.name : ""}
                 >
-                  <Icon size={20} />
+                  <Icon size={18} />
                   {isSidebarOpen && <span>{item.name}</span>}
                 </Link>
               );
             })}
-          </nav>
-        </div>
-
-        {/* === FOOTER SIDEBAR === */}
-        <div className={`flex flex-col gap-2 text-sm text-gray-700 ${isSidebarOpen ? "px-0" : "items-center"}`}>
-          {footerItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center gap-2 hover:text-black dark:text-white transition p-2 rounded-lg hover:bg-gray-50 ${!isSidebarOpen && "justify-center"}`}
-                title={!isSidebarOpen ? item.name : ""}
-              >
-                <Icon size={18} className="text-black dark:text-white" />
-                {isSidebarOpen && item.name}
-              </Link>
-            );
-          })}
-        </div>
-      </aside>
-
-      {/* === MAIN SECTION === */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* === HEADER === */}
-        <header className="flex justify-between items-center mb-4 flex-shrink-0">
-          
-          {/* Left: Menu + Search */}
-          <div className="flex items-center gap-3 w-1/2">
-            
-            {/* TOMBOL HAMBURGER (Action Toggle) */}
-            <button 
-              onClick={toggleSidebar}
-              className="bg-white dark:bg-[#3B3285] p-2 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 hover:bg-gray-50 transition"
-            >
-              <List size={18} className="text-black dark:text-white" />
-            </button>
-
-          {/* SEARCH BAR */}
-            <div className="relative flex-1">
-              <Search size={16} className="absolute left-3 top-2.5 text-black dark:text-white" />
-              <input
-                type="text"
-                placeholder="Search"
-                className="w-full pl-9 pr-3 py-2 rounded-full border border-gray-300 dark:border-gray-600 text-sm focus:outline-none bg-white dark:bg-[#3B3285] text-black dark:text-white"
-                
-                // Logic Binding
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleSearch}
-              />
-            </div>
           </div>
+        </aside>
 
-          {/* RIGHT HEADER */}
-          <div className="flex items-center gap-3">
-            <NotificationBell />
+        {/* === MAIN SECTION === */}
+        <main className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
+          {/* === HEADER === */}
+          <header className="flex justify-between items-center mb-3 sm:mb-4 flex-shrink-0 gap-2 sm:gap-3">
+            
+            {/* Left: Menu + Search */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+              
+              {/* Hamburger Menu Button */}
+              <button 
+                onClick={toggleSidebar}
+                className="bg-white dark:bg-[#3B3285] p-2 sm:p-2.5 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-[#2B265E] transition-colors flex-shrink-0"
+                aria-label="Toggle sidebar"
+              >
+                <List size={18} className="text-black dark:text-white" />
+              </button>
 
-            {/* Theme Toggle */}
-            <div className="flex items-center bg-white dark:bg-gray-800 rounded-full p-1">
-              <button
-                onClick={() => theme !== "light" && toggleTheme()}
-                className={`p-1.5 rounded-full transition ${
-                  theme === "light" ? "bg-[#5A4FB5] text-white" : "text-black"
-                }`}
-              >
-                <Sun size={16} />
-              </button>
-              <button
-                onClick={() => theme !== "dark" && toggleTheme()}
-                className={`p-1.5 rounded-full transition ${
-                  theme === "dark" ? "bg-[#5A4FB5] text-white" : "text-black"
-                }`}
-              >
-                <Moon size={16} />
-              </button>
+              {/* Search Bar */}
+              <div className="relative flex-1 min-w-0 max-w-md">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  className="w-full pl-9 pr-3 py-2 sm:py-2.5 rounded-full border border-gray-300 dark:border-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5]/20 focus:border-[#5A4FB5] bg-white dark:bg-[#3B3285] text-black dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-all"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={handleSearch}
+                />
+              </div>
             </div>
 
-            {/* === USER MENU DROPDOWN (YANG DIRAPIKAN) === */}
-            <div className="relative" ref={userMenuRef}>
+            {/* Right: Notifications + Theme + User */}
+            <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 flex-shrink-0">
+              
+              {/* Notification Bell */}
+              <NotificationBell />
+
+              {/* Theme Toggle - Hidden on small screens */}
+              <div className="hidden sm:flex items-center bg-white dark:bg-gray-800 rounded-full p-1 border border-gray-200 dark:border-gray-700">
+                <button
+                  onClick={() => theme !== "light" && toggleTheme()}
+                  className={`p-1.5 rounded-full transition-all ${
+                    theme === "light" ? "bg-[#5A4FB5] text-white shadow-sm" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  }`}
+                  aria-label="Light mode"
+                >
+                  <Sun size={16} />
+                </button>
+                <button
+                  onClick={() => theme !== "dark" && toggleTheme()}
+                  className={`p-1.5 rounded-full transition-all ${
+                    theme === "dark" ? "bg-[#5A4FB5] text-white shadow-sm" : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  }`}
+                  aria-label="Dark mode"
+                >
+                  <Moon size={16} />
+                </button>
+              </div>
+
+              {/* User Menu Dropdown */}
+              <div className="relative" ref={userMenuRef}>
                 <button 
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} 
                   className={`
-                    flex items-center gap-3 pl-1 pr-3 py-1 rounded-full bg-white dark:bg-[#3B3285] transition-all duration-200 border
+                    flex items-center gap-2 sm:gap-3 pl-1 pr-2 sm:pr-3 py-1 rounded-full transition-all duration-200 border
                     ${isUserMenuOpen 
-                      ? "bg-white border-[#5A4FB5] shadow-sm dark:bg-[#2C2C2C] dark:border-[#CAA9FF]" 
-                      : "bg-transparent border-transparent hover:bg-white/50 hover:border-gray-200 dark:hover:bg-white/10 dark:hover:border-gray-700"
+                      ? "bg-white dark:bg-[#2C2C2C] border-[#5A4FB5] dark:border-[#CAA9FF] shadow-md" 
+                      : "bg-white dark:bg-[#3B3285] border-transparent hover:border-gray-200 dark:hover:border-gray-700 hover:shadow-sm"
                     }
                   `}
+                  aria-label="User menu"
+                  aria-expanded={isUserMenuOpen}
                 >
-                    {/* Avatar: Gunakan inisial nama */}
-                    <div className="w-7 h-7 rounded-full bg-[#5A4FB5] text-white flex items-center justify-center text-xs font-bold shadow-sm">
-                      {user.name.charAt(0).toUpperCase()}
-                    </div>
-                    
-                    {/* Nama User (Hidden di mobile) */}
-                    <div className="hidden md:flex flex-col items-start text-left">
-                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-200 leading-tight">
-                        {user.name?.split(" ")[0] || "User"} {/* Ambil nama depan saja biar rapi */}
-                      </span>
-                      <span className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">
-                        {user.role || "Team"}
-                      </span>
-                    </div>
+                  {/* Avatar */}
+                  <div className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#5A4FB5] text-white flex items-center justify-center text-xs font-bold shadow-sm overflow-hidden flex-shrink-0">
+                    {user.photo ? (
+                      <Image 
+                        src={user.photo} 
+                        alt={user.name} 
+                        fill 
+                        sizes="32px"
+                        className="object-cover"
+                      />
+                    ) : (
+                      user.name.charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  
+                  {/* User Info - Hidden on mobile */}
+                  <div className="hidden md:flex flex-col items-start text-left min-w-0">
+                    <span className="text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-200 leading-tight truncate max-w-[100px] lg:max-w-[150px]">
+                      {user.name?.split(" ")[0] || "User"}
+                    </span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight truncate max-w-[100px] lg:max-w-[150px]">
+                      {user.role || "Team"}
+                    </span>
+                  </div>
 
-                    <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isUserMenuOpen ? "rotate-180 text-[#5A4FB5]" : ""}`} />
+                  <ChevronDown 
+                    size={14} 
+                    className={`text-gray-400 transition-transform duration-200 flex-shrink-0 ${
+                      isUserMenuOpen ? "rotate-180 text-[#5A4FB5]" : ""
+                    }`} 
+                  />
                 </button>
 
-                {/* Dropdown Content */}
+                {/* Dropdown Menu */}
                 {isUserMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#2C2C2C] rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] border border-gray-100 dark:border-gray-700 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-right">
-                        
-                        {/* Header Profile Info */}
-                        <div className="px-5 py-4 bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700">
-                            <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
-                              {user.name}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                              {user.email}
-                            </p>
+                  <div className="absolute right-0 mt-2 w-64 sm:w-72 bg-white dark:bg-[#2C2C2C] rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-right">
+                    
+                    {/* Profile Header */}
+                    <div className="px-4 sm:px-5 py-3 sm:py-4 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 border-b border-gray-100 dark:border-gray-700">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="relative w-10 h-10 rounded-full bg-[#5A4FB5] text-white flex items-center justify-center text-sm font-bold shadow-md overflow-hidden">
+                          {user.photo ? (
+                            <Image 
+                              src={user.photo} 
+                              alt={user.name} 
+                              fill 
+                              sizes="40px"
+                              className="object-cover"
+                            />
+                          ) : (
+                            user.name.charAt(0).toUpperCase()
+                          )}
                         </div>
-
-                        {/* Menu Links */}
-                        <div className="p-2 space-y-0.5">
-                            <Link 
-                              href="/profile" 
-                              className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-[#5A4FB5] dark:hover:text-[#CAA9FF] rounded-xl transition-colors" 
-                              onClick={() => setIsUserMenuOpen(false)}
-                            >
-                                <UserCircle size={18} /> My Profile
-                            </Link>
-                            <Link 
-                              href="/#" 
-                              className="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-[#5A4FB5] dark:hover:text-[#CAA9FF] rounded-xl transition-colors" 
-                              onClick={() => setIsUserMenuOpen(false)}
-                            >
-                                <Settings size={18} /> Account Settings
-                            </Link>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                            {user.name}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {user.email}
+                          </p>
                         </div>
-
-                        <div className="h-px bg-gray-100 dark:bg-gray-700 mx-2 my-1"></div>
-
-                        {/* Logout */}
-                        <div className="p-2">
-                            <button 
-                              className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors text-left" 
-                              onClick={handleLogout}
-                            >
-                                <LogOut size={18} /> Log out
-                            </button>
-                        </div>
+                      </div>
                     </div>
-                )}
-            </div>
-          </div>
-        </header>
 
-        <div className="flex-1 overflow-hidden">
-          {children}
-        </div>
-      </main>
-    </div>
+                    {/* Menu Items */}
+                    <div className="p-2">
+                      {/* Theme Toggle - Mobile only */}
+                      <button
+                        onClick={() => {
+                          toggleTheme();
+                          setIsUserMenuOpen(false);
+                        }}
+                        className="sm:hidden w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors text-left mb-1"
+                      >
+                        {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
+                        <span>Switch to {theme === 'light' ? 'Dark' : 'Light'} Mode</span>
+                      </button>
+
+                      {/* Logout */}
+                      <button 
+                        className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors text-left" 
+                        onClick={handleLogout}
+                      >
+                        <LogOut size={18} /> 
+                        <span>Log out</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </header>
+
+          {/* Main Content Area */}
+          <div className="flex-1 overflow-hidden rounded-2xl">
+            {children}
+          </div>
+        </main>
+      </div>
     </AuthGuard>
   );
 }
 
-// WRAPPER UTAMA (Wajib ada Provider di luar Content)
+// Main layout wrapper with providers
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider>
-      {/* Gunakan Skeleton juga disini agar transisi sangat mulus */}
       <Suspense fallback={<DashboardSkeleton />}>
         <AuthGuard>
           <DashboardContent>{children}</DashboardContent>

@@ -27,18 +27,18 @@ const generateInvoiceHTML = (invoice: any, organization: any, lead: any) => {
       
       <div style="border-bottom: 2px solid #5A4FB5; padding-bottom: 20px; margin-bottom: 20px;">
         <h2 style="color: #5A4FB5; margin: 0;">INVOICE #${invoice.invoiceNumber}</h2>
-        <p style="color: #666; margin: 5px 0 0 0;">Dari: <strong>${organization.companyName}</strong></p>
+        <p style="color: #666; margin: 5px 0 0 0;">From: <strong>${organization.companyName}</strong></p>
       </div>
 
-      <p>Halo <strong>${lead.contact?.name || "Pelanggan"}</strong>,</p>
-      <p>Terima kasih atas kepercayaan Anda. Berikut adalah rincian tagihan untuk layanan kami:</p>
+      <p>Hello <strong>${lead.contact?.name || "Customer"}</strong>,</p>
+      <p>Thank you for your trust. Here are the billing details for our services:</p>
       
       <table style="width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px;">
         <thead>
           <tr style="background-color: #f9f9f9; text-align: left;">
             <th style="padding: 10px; border-bottom: 2px solid #ddd;">Item</th>
             <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: center;">Qty</th>
-            <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">Harga</th>
+            <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">Price</th>
             <th style="padding: 10px; border-bottom: 2px solid #ddd; text-align: right;">Total</th>
           </tr>
         </thead>
@@ -50,13 +50,13 @@ const generateInvoiceHTML = (invoice: any, organization: any, lead: any) => {
       <div style="margin-top: 30px; text-align: right;">
         <p style="margin: 5px 0;">Subtotal: ${formatCurrency(Number(invoice.subtotal))}</p>
         <p style="margin: 5px 0;">Tax (${invoice.taxPercent}%): ${formatCurrency(Number(invoice.totalAmount) - Number(invoice.subtotal))}</p>
-        <h3 style="color: #5A4FB5; margin-top: 10px;">Total Tagihan: ${formatCurrency(Number(invoice.totalAmount))}</h3>
+        <h3 style="color: #5A4FB5; margin-top: 10px;">Total Amount: ${formatCurrency(Number(invoice.totalAmount))}</h3>
       </div>
 
       <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #888; text-align: center;">
-        <p>Jatuh tempo pada: ${new Date(invoice.dueDate).toLocaleDateString('id-ID', { dateStyle: 'long' })}</p>
+        <p>Due date: ${new Date(invoice.dueDate).toLocaleDateString('en-US', { dateStyle: 'long' })}</p>
         <p>${organization.addressLine1 || ""} ${organization.city || ""}</p>
-        <p>Jika ada pertanyaan, silakan balas email ini.</p>
+        <p>If you have any questions, please reply to this email.</p>
       </div>
     </div>
   `;

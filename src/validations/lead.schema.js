@@ -89,6 +89,8 @@ export const updateLeadSchema = z.object({
     sourceOrigin: z.string().optional(),
     sourceChannel: z.string().optional(),
     sourceChannelId: z.string().optional(),
+    priority: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
+    client_type: z.enum(['NEW', 'REPEAT']).optional(),
     // Catatan: labelId tidak di-update lewat rute ini
   })
   // Logika validasi tambahan: Minimal harus ada 1 field yang dikirim

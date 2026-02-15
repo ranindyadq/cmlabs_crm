@@ -18,6 +18,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ 
         data: {
           companyName: "",
+          tagline: "",
           addressLine1: "",
           addressLine2: "",
           city: "",
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
     // Destructuring sesuai model Anda
     const { 
       companyName, 
+      tagline,
       addressLine1, 
       addressLine2, 
       city, 
@@ -59,7 +61,7 @@ export async function POST(req: Request) {
       email, 
       phone, 
       website,
-      logoUrl
+      logoUrl,
     } = body;
 
     // Cek apakah data sudah ada
@@ -72,6 +74,7 @@ export async function POST(req: Request) {
         where: { id: existing.id },
         data: {
           companyName,
+          tagline,
           addressLine1,
           addressLine2,
           city,
@@ -88,6 +91,7 @@ export async function POST(req: Request) {
       result = await prisma.organizationProfile.create({
         data: {
           companyName: companyName || "My Company",
+          tagline,
           addressLine1,
           addressLine2,
           city,

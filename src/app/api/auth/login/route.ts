@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     // Hanya blokir jika 'INACTIVE'. Onboarding/OnLeave tetap boleh masuk.
     if (user.status === 'INACTIVE') {
       return NextResponse.json({
-        message: `Akses ditolak. Akun Anda telah dinonaktifkan Admin.`,
+        message: `Access denied. Your account has been deactivated by Admin.`,
       }, { status: 403 });
     }
     
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
 
     // 7. RETURN RESPONSE
     const response = NextResponse.json({
-      message: 'Login berhasil.',
+      message: 'Login successful.',
       token, 
       role: user.role.name,
       user: {
@@ -85,6 +85,6 @@ export async function POST(req: Request) {
 
   } catch (error) {
     console.error('Error in signIn:', error);
-    return NextResponse.json({ message: 'Terjadi kesalahan server saat login.' }, { status: 500 });
+    return NextResponse.json({ message: 'Server error during login.' }, { status: 500 });
   }
 }

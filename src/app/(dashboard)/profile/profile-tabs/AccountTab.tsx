@@ -78,21 +78,25 @@ export default function AccountTab() {
 };
 
   return (
-    <div className="w-full px-6 py-1">
+    <div className="w-full">
 
       {/* HEADER */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="mb-6">
+      <div className="flex items-center gap-2 mb-1">
         <Lock className="w-5 h-5 text-gray-700" />
-        <div>
-          <h2 className="text-[17px] font-semibold text-gray-700">Account</h2>
-          <p className="text-sm text-gray-500">Manage your account</p>
+        <h2 className="font-semibold text-gray-800 text-[16px]">Account</h2>
         </div>
+        <p className="text-[12px] text-gray-500">Manage your account</p>
       </div>
 
-      <h3 className="font-semibold text-gray-700 mb-3">Password</h3>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-6">
+
+      <h3 className="font-semibold text-gray-700">Password</h3>
 
       {/* ==================== CURRENT PASSWORD ==================== */}
-      <label className="text-sm font-medium">Current Password</label>
+      <div className="space-y-1">
+      <div>
+      <label className="text-sm font-medium mt-1 block">Current Password</label>
       <div className="relative mt-1">
         <input
           type="password"
@@ -109,9 +113,11 @@ export default function AccountTab() {
       {currentError && (
         <p className="text-xs text-red-500 mt-1">{currentError}</p>
       )}
+      </div>
 
       {/* ==================== NEW PASSWORD ==================== */}
-      <label className="text-sm font-medium mt-5 block">New Password</label>
+      <div>
+      <label className="text-sm font-medium mt-1 block">New Password</label>
       <div className="relative mt-1">
         <input
           type="password"
@@ -133,9 +139,11 @@ export default function AccountTab() {
           ))}
         </div>
       )}
+      </div>
 
       {/* ==================== CONFIRM PASSWORD ==================== */}
-      <label className="text-sm font-medium mt-5 block">Confirm Password</label>
+      <div>
+      <label className="text-sm font-medium mt-1 block">Confirm Password</label>
       <div className="relative mt-1">
         <input
           type="password"
@@ -157,38 +165,34 @@ export default function AccountTab() {
           ))}
         </div>
       )}
+      </div>
+      </div>
 
       {/* ==================== SAVE BUTTON ==================== */}
-      <div className="flex justify-end mt-6">
+      <div className="flex justify-end mt-4">
         <button
           onClick={handleSave}
           disabled={loading} // Cegah klik ganda
-          className="px-6 py-2 rounded-full bg-[#5A4FB5] text-white text-sm font-medium flex items-center gap-2"
+          className="px-6 py-2.5 rounded-lg bg-[#5A4FB5] hover:bg-gray-900 text-white text-sm font-medium flex items-center gap-2 transition-colors disabled:opacity-50"
         >
-          {loading ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <Save size={16} />
-          )}
-          {loading ? "Processing..." : "Save Changes"}
+          <Save size={16} className="text-white" />
+          Save Changes
         </button>
+      </div>
       </div>
 
       {/* ==================== SAVE CONFIRMATION POPUP ==================== */}
-      {savePopup && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/30">
-          <div className="bg-white rounded-2xl shadow-lg p-6 w-[300px] text-center">
-            <div className="mx-auto w-16 h-16 rounded-full bg-green-500 flex items-center justify-center mb-4">
-              <FileCheck size={32} color="white" />
-            </div>
-
-            <h3 className="text-lg font-semibold">Saved</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              Changes have been updated
-            </p>
+            {savePopup && (
+              <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/30">
+                <div className="bg-white rounded-2xl shadow-lg p-6 w-[300px] text-center">
+                  <div className="mx-auto w-16 h-16 rounded-full bg-green-500 flex items-center justify-center mb-4">
+                    <FileCheck size={32} color="white" />
+                  </div>
+                  <h3 className="text-lg font-semibold">Account Updated</h3>
+                  <p className="text-sm text-gray-600 mt-1">Account information has been saved successfully.</p>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      )}
-    </div>
   );
 }

@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     const query = searchParams.get("q");
 
     if (!query || query.length < 1) {
-      return NextResponse.json({ message: "Search query 'q' tidak boleh kosong." }, { status: 400 });
+      return NextResponse.json({ message: "Search query 'q' cannot be empty." }, { status: 400 });
     }
 
     // Kondisi pencarian dasar (case-insensitive)
@@ -40,13 +40,51 @@ export async function GET(req: Request) {
     };
 
     // LOGIC UTAMA: Batasi akses jika bukan ADMIN
-    if (user.role !== 'ADMIN') {
+    const isAdmin = user.role === 'ADMIN';
+    if (!isAdmin) {
       whereLeads.ownerId = user.id;
     }
 
     // ==========================================================
-    // 4. JALANKAN PENCARIAN PARALEL (SAMA DENGAN LAMA)
+    // 4. RBAC UNTUK CONTACTS & COMPANIES
+    // Non-admin hanya bisa lihat contacts/companies dari lead mereka
     // ==========================================================
+    const whereContacts: any = {
+      OR: [
+        { name: searchCondition },
+        { email: searchCondition },
+        { phone: searchCondition },
+      ],
+    };
+
+    const whereCompanies: any = {
+      OR: [
+        { name: searchCondition },
+        { website: searchCondition },
+      ],
+    };
+
+    // Jika bukan admin, batasi contacts & companies ke yang terkait dengan lead user
+    if (!isAdmin) {
+      whereContacts.leads = {
+        some: {
+          ownerId: user.id,
+          deletedAt: null,
+        },
+      };
+      whereCompanies.leads = {
+        some: {
+          ownerId: user.id,
+          deletedAt: null,
+        },
+      };
+    }
+
+    // ==========================================================
+    // 5. JALANKAN PENCARIAN PARALEL
+    // ==========================================================
+    const SEARCH_LIMIT = 15; // Limit hasil pencarian
+    
     const [leads, contacts, companies] = await prisma.$transaction([
       // 1. Leads
       prisma.lead.findMany({
@@ -55,37 +93,36 @@ export async function GET(req: Request) {
           id: true,
           title: true,
           status: true,
-          stage: true
+          stage: true,
+          value: true,
         },
-        take: 5,
+        orderBy: { createdAt: 'desc' },
+        take: SEARCH_LIMIT,
       }),
       
-      // 2. Contacts
+      // 2. Contacts (RBAC applied)
       prisma.contact.findMany({
-        where: {
-          OR: [
-            { name: searchCondition },
-            { email: searchCondition },
-          ],
-        },
+        where: whereContacts,
         select: {
           id: true,
           name: true,
           email: true,
+          position: true,
         },
-        take: 5,
+        orderBy: { name: 'asc' },
+        take: SEARCH_LIMIT,
       }),
 
-      // 3. Companies
+      // 3. Companies (RBAC applied)
       prisma.company.findMany({
-        where: {
-          name: searchCondition,
-        },
+        where: whereCompanies,
         select: {
           id: true,
           name: true,
+          website: true,
         },
-        take: 5,
+        orderBy: { name: 'asc' },
+        take: SEARCH_LIMIT,
       }),
     ]);
 

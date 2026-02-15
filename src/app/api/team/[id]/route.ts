@@ -3,21 +3,30 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth-helper";
 
 // --- EDIT TEAM MEMBER (PATCH/PUT) ---
-export async function PATCH(
-  req: Request,
-  { params }: { params: { id: string } } 
-) {
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
-    // 🔒 Security Check (Only Admin)
     const user = await getSessionUser(req);
-    if (!user || user.role !== 'ADMIN') {
-        return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    
+    // 1. Cek User Null
+    if (!user) {
+        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    // 2. Ekstrak Role dengan Aman (Fix Error 'never')
+    const roleData = user.role as any;
+    const userRole = typeof roleData === 'string' ? roleData : roleData?.name;
+
+    // 3. Cek Permission (Admin & Owner Only)
+    const allowedEditors = ['ADMIN', 'OWNER'];
+
+    if (!userRole || !allowedEditors.includes(userRole.toUpperCase())) {
+        return NextResponse.json({ message: "Forbidden: You cannot edit team members." }, { status: 403 });
     }
 
     const id = params.id;
     const body = await req.json();
     const { 
-        fullName, status, phone, roleName,
+        fullName, status, phone, roleName, managerId,
         department, roleTitle, bio, skills, location, joinedAt 
     } = body;
 
@@ -34,6 +43,7 @@ export async function PATCH(
         fullName,
         status,
         phone,
+        managerId: managerId || null,
         ...roleUpdate,
         workInfo: {
           upsert: {
@@ -43,7 +53,7 @@ export async function PATCH(
               joinedAt: new Date(), // Opsional: set default joinedAt jika baru dibuat
               bio,
               location,
-              skills: Array.isArray(skills) ? skills : []
+              skills: Array.isArray(skills) ? skills : [],
             },
             update: { department, 
               roleTitle,
@@ -57,29 +67,40 @@ export async function PATCH(
       }
     });
 
-    return NextResponse.json({ message: "Data anggota tim diperbarui.", data: updatedUser });
+    return NextResponse.json({ message: "Team member data updated.", data: updatedUser });
   } catch (error) {
     console.error("Error updating team member:", error);
-    return NextResponse.json({ message: "Gagal memperbarui data." }, { status: 500 });
+    return NextResponse.json({ message: "Failed to update data." }, { status: 500 });
   }
 }
 
 // --- DELETE TEAM MEMBER (SOFT DELETE) ---
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
+    const user = await getSessionUser(req);
+    
+    // 1. Cek User Null
+    if (!user) {
+        return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    // 2. Ekstrak Role dengan Aman
+    const roleData = user.role as any;
+    const userRole = typeof roleData === 'string' ? roleData : roleData?.name;
+
+    // 3. Cek Permission (Admin & Owner Only)
+    const allowedDeleters = ['ADMIN', 'OWNER'];
+
+    if (!userRole || !allowedDeleters.includes(userRole.toUpperCase())) {
+        return NextResponse.json({ message: "Forbidden: You cannot delete team members." }, { status: 403 });
+    }
+
     const id = params.id;
 
-    // 🔒 Security Check (Only Admin)
-    const user = await getSessionUser(req);
-    if (!user || user.role !== 'ADMIN') {
-        return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-    }
-
-    // ✅ Logic: Jangan hapus diri sendiri
     if (user.id === id) {
-        return NextResponse.json({ message: "Anda tidak dapat menghapus akun Anda sendiri." }, { status: 400 });
+        return NextResponse.json({ message: "You cannot delete your own account." }, { status: 400 });
     }
-
+    
     // 1. Cek apakah user punya Lead yang masih aktif (Optional tapi bagus)
   const activeLeads = await prisma.lead.count({
     where: { 
@@ -104,9 +125,9 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     }
   });
 
-    return NextResponse.json({ message: "Anggota tim berhasil dihapus (soft delete)." });
+    return NextResponse.json({ message: "Team member successfully deleted (soft delete)." });
   } catch (error) {
     console.error("Error deleting team member:", error);
-    return NextResponse.json({ message: "Gagal menghapus anggota tim." }, { status: 500 });
+    return NextResponse.json({ message: "Failed to delete team member." }, { status: 500 });
   }
 }

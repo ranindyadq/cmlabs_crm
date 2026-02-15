@@ -95,8 +95,13 @@ export async function GET(req: Request) {
 
     const totalPages = Math.ceil(totalLeads / limit);
 
+    const formattedLeads = leads.map(lead => ({
+      ...lead,
+      value: lead.value ? Number(lead.value) : 0, // Konversi Decimal ke Number JavaScript
+    }));
+
     return NextResponse.json({
-      data: leads,
+      data: formattedLeads,
       pagination: {
         totalLeads,
         totalPages,

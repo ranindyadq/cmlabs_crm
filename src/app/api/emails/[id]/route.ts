@@ -10,15 +10,42 @@ async function checkAccess(emailId: string, user: any) {
   return { success: true };
 }
 
-// PATCH
+// PATCH (Update Email)
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const user = await getSessionUser(req);
-  const check = await checkAccess(params.id, user);
-  if (check.error) return NextResponse.json({ message: check.error }, { status: check.status });
+  try {
+    const user = await getSessionUser(req);
+    const check = await checkAccess(params.id, user);
+    if (check.error) return NextResponse.json({ message: check.error }, { status: check.status });
 
-  const body = await req.json();
-  const updated = await prisma.email.update({ where: { id: params.id }, data: body });
-  return NextResponse.json({ message: "Email updated", data: updated });
+    const body = await req.json();
+
+    // Validasi sederhana: Jangan biarkan user mengubah 'sentAt' atau 'leadId' sembarangan
+    // Ambil field yang boleh diubah saja
+    const { subject, body: emailBody, toAddress, ccAddress, bccAddress, scheduledAt, attachmentUrl } = body;
+
+    // Logika Status: Jika user mengubah jadwal, kembalikan status ke SCHEDULED
+    let statusUpdate = {};
+    if (scheduledAt) {
+        statusUpdate = { status: 'SCHEDULED', scheduledAt: new Date(scheduledAt) };
+    }
+
+    const updated = await prisma.email.update({
+        where: { id: params.id },
+        data: {
+            subject,
+            body: emailBody,
+            toAddress,
+            ccAddress,
+            bccAddress,
+            attachmentUrl,
+            ...statusUpdate
+        }
+    });
+
+    return NextResponse.json({ message: "Email updated", data: updated });
+  } catch (error) {
+    return NextResponse.json({ message: "Error updating" }, { status: 500 });
+  }
 }
 
 // DELETE

@@ -2,52 +2,88 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma"; // ✅ Pakai ini, jangan new PrismaClient()
 import { getSessionUser } from "@/lib/auth-helper";
 
-// === POST: MEMBUAT INVOICE BARU (SUPPORT MULTI-ITEMS) ===
+async function generateInvoiceNumber() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const prefix = `INV/${year}/${month}/`;
+
+  // Cari invoice terakhir yang punya prefix sama
+  const lastInvoice = await prisma.invoice.findFirst({
+    where: {
+      invoiceNumber: {
+        startsWith: prefix,
+      },
+    },
+    orderBy: {
+      invoiceNumber: 'desc',
+    },
+    select: {
+      invoiceNumber: true,
+    },
+  });
+
+  let nextNumber = 1;
+  if (lastInvoice) {
+    // Ambil 3 digit terakhir dan tambah 1
+    const lastSequence = lastInvoice.invoiceNumber.split('/').pop();
+    nextNumber = parseInt(lastSequence || "0") + 1;
+  }
+
+  // Format: INV/2026/02/001
+  return `${prefix}${String(nextNumber).padStart(3, '0')}`;
+}
+
 export async function POST(
   req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
-    // 1. Cek Login
     const user = await getSessionUser(req);
     if (!user) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
     const leadId = params.id;
+    
+    // --- TAMBAHAN VALIDASI LEAD ---
+    const existingLead = await prisma.lead.findFirst({
+      where: { 
+        id: leadId,
+        deletedAt: null // Pastikan lead tidak dalam kondisi soft-deleted
+      },
+      select: { id: true, companyId: true, contactId: true }
+    });
+
+    if (!existingLead) {
+      return NextResponse.json({ message: "Lead not found or has been deleted." }, { status: 404 });
+    }
+    // ------------------------------
+
     const body = await req.json();
 
-    console.log("PAYLOAD RECEIVED:", body); // Debugging
+    const finalInvoiceNumber = body.invoiceNumber || await generateInvoiceNumber();
 
-    // 2. AMBIL DATA DARI BODY
-    // Frontend mengirim array 'items', kita ambil itu.
     const itemsInput = body.items; 
     const notesInput = body.notes;
     const dueDateInput = body.dueDate || body.due_date;
 
-    // 3. VALIDASI INPUT UTAMA
     if (!itemsInput || !Array.isArray(itemsInput) || itemsInput.length === 0) {
-      console.log("❌ Gagal Validasi: Array items kosong");
       return NextResponse.json({ message: "Minimal satu item wajib diisi." }, { status: 400 });
     }
 
-    // 4. LOOPING ITEMS & KALKULASI TOTAL
     let subtotal = 0;
-    
-    // Kita map array dari frontend menjadi format yang siap disimpan ke DB
     const itemsToCreate = itemsInput.map((item: any) => {
         const name = item.itemName || item.item_name;
         const qty = Number(item.quantity || item.qty || 0);
         const price = Number(item.unitPrice || item.unit_price || 0);
         const lineTotal = qty * price;
 
-        // Validasi per item
         if (!name || qty <= 0 || price <= 0) {
-            throw new Error(`Data item tidak valid: ${JSON.stringify(item)}`);
+            throw new Error(`Invalid item data: ${name}`);
         }
 
         subtotal += lineTotal;
-
         return {
             itemName: name,
             quantity: qty,
@@ -56,49 +92,54 @@ export async function POST(
         };
     });
 
-    // Hitung Pajak & Grand Total
-    const taxPercent = 10; 
-    const taxAmount = subtotal * (taxPercent / 100);
-    const totalAmount = subtotal + taxAmount;
+    const taxPercent = body.taxPercent !== undefined ? Number(body.taxPercent) : 10; // ✅ Dinamis dari input
+    const totalAmount = subtotal + (subtotal * (taxPercent / 100));
 
-    // 5. SIMPAN KE DATABASE
-    const newInvoice = await prisma.invoice.create({
-      data: {
-        leadId: leadId,
-        // Gunakan nomor invoice dari frontend kalau ada, kalau tidak generate sendiri
-        invoiceNumber: body.invoiceNumber || `INV-${Date.now()}`,
-        status: "DRAFT",
-        
-        invoiceDate: body.invoiceDate ? new Date(body.invoiceDate) : new Date(),
-        dueDate: dueDateInput ? new Date(dueDateInput) : new Date(),
+    // MENGGUNAKAN TRANSACTION UNTUK ATOMICITY
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Buat Invoice
+      const inv = await tx.invoice.create({
+        data: {
+          leadId: leadId,
+          invoiceNumber: finalInvoiceNumber,
+          status: "DRAFT",
+          invoiceDate: body.invoiceDate ? new Date(body.invoiceDate) : new Date(),
+          dueDate: dueDateInput ? new Date(dueDateInput) : new Date(),
+          subtotal: subtotal,
+          taxPercent: taxPercent,
+          totalAmount: totalAmount,
+          notes: notesInput || "",
+          items: { create: itemsToCreate }
+        },
+        include: { items: true }
+      });
 
-        subtotal: subtotal,
-        taxPercent: taxPercent,
-        totalAmount: totalAmount,
-        notes: notesInput || "",
-        
-        // Nested Create untuk Items
-        items: {
-          create: itemsToCreate 
-        }
-      },
-      include: {
-        items: true 
-      }
+      // 2. Update Lead Value secara otomatis
+      await tx.lead.update({
+        where: { id: leadId },
+        data: { value: totalAmount }
+      });
+
+      return inv;
     });
 
     return NextResponse.json({ 
-      message: "Invoice berhasil dibuat", 
-      data: newInvoice 
+      message: "Invoice successfully created and lead value updated", 
+      data: result 
     }, { status: 201 });
 
   } catch (error: any) {
     console.error("Create Invoice Error:", error.message);
-    // Tangkap error validasi item spesifik tadi
-    if (error.message.includes("Data item tidak valid")) {
-        return NextResponse.json({ message: error.message }, { status: 400 });
+
+    // ✅ Tangkap Error Unik Prisma (P2002)
+    if (error.code === 'P2002' && error.meta?.target?.includes('invoiceNumber')) {
+        return NextResponse.json(
+            { message: "This invoice number is already in use. Please refresh or use a different number." }, 
+            { status: 409 } // 409 Conflict
+        );
     }
-    return NextResponse.json({ message: "Gagal membuat invoice" }, { status: 500 });
+
+    return NextResponse.json({ message: error.message || "Failed to create invoice" }, { status: 500 });
   }
 }
 
@@ -121,9 +162,21 @@ export async function GET(
         orderBy: { invoiceDate: 'desc' }
       });
 
+      const formattedInvoices = invoices.map(inv => ({
+    ...inv,
+    subtotal: Number(inv.subtotal),
+    taxPercent: Number(inv.taxPercent),
+    totalAmount: Number(inv.totalAmount),
+    items: inv.items.map(item => ({
+        ...item,
+        unitPrice: Number(item.unitPrice),
+        total: Number(item.total)
+    }))
+}));
+
       return NextResponse.json({ data: invoices });
   } catch (error) {
       console.error("Get Invoices Error:", error);
-      return NextResponse.json({ message: "Gagal mengambil data invoice" }, { status: 500 });
+      return NextResponse.json({ message: "Failed to fetch invoice data" }, { status: 500 });
   }
 }

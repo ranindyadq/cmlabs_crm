@@ -16,6 +16,10 @@ const nextConfig = {
         protocol: 'https',
         hostname: '**', // Mengizinkan semua domain gambar (untuk development)
       },
+      {
+        protocol: 'https',
+        hostname: '*.public.blob.vercel-storage.com', // 👈 WAJIB UNTUK VERCEL BLOB
+      },
     ],
   },
 };

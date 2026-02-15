@@ -49,6 +49,7 @@ export async function PATCH(
 
     // 3. Ambil Data Body
     const body = await req.json();
+    const { content, title, createdAt, attachmentUrl } = body;
     
     // Opsional: Sanitasi (Hapus field yang tidak boleh diubah manual)
     delete body.id;
@@ -59,7 +60,12 @@ export async function PATCH(
     // 4. Update Database
     const updatedNote = await prisma.note.update({
       where: { id },
-      data: body,
+      data: {
+        content: content,
+        title: title,
+        attachmentUrl: attachmentUrl,
+        createdAt: createdAt ? new Date(createdAt) : undefined,
+      }
     });
 
     return NextResponse.json({

@@ -4,7 +4,6 @@ import { ThemeProvider } from '@/lib/context/ThemeContext'
 import { Toaster } from "react-hot-toast";
 import NextTopLoader from 'nextjs-toploader';
 
-
 const poppins = Poppins({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],

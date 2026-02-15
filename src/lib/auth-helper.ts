@@ -79,7 +79,7 @@ export function checkResourceAccess(user: SessionUser | null, resourceOwnerId: s
   if (!user) return false;
 
   // 1. Admin Dewa (Bisa segalanya)
-  if (user.role === 'ADMIN') return true;
+  if (user.role === 'ADMIN' || user.role === 'OWNER' || user.role === 'PROJECT MANAGER') return true;
 
   // 2. Sales Cek Kepemilikan
   if (user.role === 'SALES') {

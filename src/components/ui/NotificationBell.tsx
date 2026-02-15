@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Bell, Check } from "lucide-react";
 import apiClient from "@/lib/apiClient";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 // Tipe Data Notifikasi
 interface Notification {
@@ -190,9 +191,13 @@ export default function NotificationBell() {
 
           {/* Footer Dropdown */}
           <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-[#322b72] text-center">
-            <button className="text-xs text-gray-500 dark:text-gray-400 hover:text-[#5A4FB5] dark:hover:text-[#CAA9FF] transition font-medium">
+            <Link 
+              href="/notifications"
+              onClick={() => setIsOpen(false)} 
+              className="text-xs text-gray-500 dark:text-gray-400 hover:text-[#5A4FB5] dark:hover:text-[#CAA9FF] transition font-medium block w-full"
+            >
               View all notifications
-            </button>
+            </Link>
           </div>
         </div>
       )}

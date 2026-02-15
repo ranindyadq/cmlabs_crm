@@ -116,8 +116,8 @@ function getMonthlyChartData(wonLeads: any[]) {
     const year = d.getFullYear();
 
     const leadsInMonth = wonLeads.filter((l: any) => {
-      const leadDate = new Date(l.updatedAt);
-      return leadDate.getMonth() === monthIdx && leadDate.getFullYear() === year;
+      const dateRef = l.closedAt ? new Date(l.closedAt) : new Date(l.updatedAt);
+      return dateRef.getMonth() === monthIdx && dateRef.getFullYear() === year;
     });
 
     const revenue = leadsInMonth.reduce((acc: number, curr: any) => {

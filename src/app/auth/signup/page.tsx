@@ -145,8 +145,8 @@ export default function SignUpPage() {
             <input type="checkbox" required />
             <span>
               I agree to CRM{" "}
-              <Link href="#" className="text-[#5A4FB5] dark:text-[#9083F5]">Terms of Service</Link> and{" "}
-              <Link href="#" className="text-[#5A4FB5] dark:text-[#9083F5]">Privacy Policy</Link>.
+              <Link href="/terms" className="text-[#5A4FB5] dark:text-[#9083F5] hover:underline">Terms of Service</Link> and{" "}
+              <Link href="/privacy" className="text-[#5A4FB5] dark:text-[#9083F5] hover:underline">Privacy Policy</Link>.
             </span>
           </label>
 

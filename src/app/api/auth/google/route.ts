@@ -8,6 +8,6 @@ export async function GET() {
     return NextResponse.redirect(url);
   } catch (error) {
     console.error("Google Auth Error:", error);
-    return NextResponse.json({ error: "Gagal inisialisasi login Google" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to initialize Google login" }, { status: 500 });
   }
 }
