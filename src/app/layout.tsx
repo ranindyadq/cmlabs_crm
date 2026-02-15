@@ -3,15 +3,19 @@ import { Poppins } from "next/font/google";
 import { ThemeProvider } from '@/lib/context/ThemeContext'
 import { Toaster } from "react-hot-toast";
 import NextTopLoader from 'nextjs-toploader';
+import { Metadata } from "next";
 
 const poppins = Poppins({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
 
-export const metadata = {
-  title: "CRM App",
-  description: "CRM project",
+export const metadata: Metadata = {
+  title: "cmlabs CRM", // Mengubah teks judul di tab browser
+  description: "Customer Relationship Management cmlabs",
+  icons: {
+    icon: "/LOGO CRM 1.png", // Mengarahkan ikon tab ke logo kamu
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
