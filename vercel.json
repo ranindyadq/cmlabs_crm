@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/send-emails",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
