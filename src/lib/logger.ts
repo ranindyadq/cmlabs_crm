@@ -1,50 +1,23 @@
 import winston from 'winston';
-import 'winston-daily-rotate-file'; // Import plugin rotation
 
-const { combine, timestamp, printf, colorize, errors } = winston.format;
+const { combine, timestamp, printf, colorize } = winston.format;
 
-const logFormat = printf(({ level, message, timestamp, stack }) => {
-  return `${timestamp} [${level}]: ${stack || message}`;
+const logFormat = printf(({ level, message, timestamp }) => {
+  return `${timestamp} [${level}]: ${message}`;
 });
 
-// Konfigurasi Rotasi untuk Log Gabungan (Combined)
-const dailyRotateCombined = new winston.transports.DailyRotateFile({
-  filename: 'logs/combined-%DATE%.log',
-  datePattern: 'YYYY-MM-DD',
-  zippedArchive: true,     // Kompres file lama jadi .gz (hemat tempat!)
-  maxSize: '20m',          // Pecah file jika sudah mencapai 20MB
-  maxFiles: '14d',         // Hapus log yang lebih tua dari 14 hari
-});
-
-// Konfigurasi Rotasi khusus untuk Error
-const dailyRotateError = new winston.transports.DailyRotateFile({
-  filename: 'logs/error-%DATE%.log',
-  datePattern: 'YYYY-MM-DD',
-  zippedArchive: true,
-  maxSize: '10m',
-  maxFiles: '30d',         // Error disimpan lebih lama (30 hari) untuk audit
-  level: 'error',
-});
-
+// Inisialisasi logger tanpa file transport untuk Production
 const logger = winston.createLogger({
   level: 'info',
-  format: combine(
-    timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-    errors({ stack: true }),
-    logFormat
-  ),
+  format: combine(timestamp(), logFormat),
   transports: [
-    dailyRotateCombined,
-    dailyRotateError,
+    new winston.transports.Console({
+      format: combine(colorize(), logFormat),
+    }),
   ],
 });
 
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(
-    new winston.transports.Console({
-      format: combine(colorize(), logFormat),
-    })
-  );
-}
+// Hapus atau beri komentar bagian yang menambahkan File transport (DailyRotateFile, dll)
+// Karena Vercel adalah Read-Only File System (EROFS)
 
 export default logger;
