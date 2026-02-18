@@ -27,7 +27,9 @@ export default function LeadDetailPage() {
 
   useEffect(() => {
     if (id) fetchLead();
-  }, [id]);
+  }, 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [id]);
 
   if (loading) return <div className="p-8 text-center text-gray-500 dark:text-gray-400">Loading Lead...</div>;
   if (!lead) return <div className="p-8 text-center text-red-500 dark:text-red-400">Lead not found.</div>;

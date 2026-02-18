@@ -1,27 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
 import apiClient from "@/lib/apiClient";
 import { Phone, NotebookPen, Video, Mail, FileText, Receipt, User } from "lucide-react";
 
-export default function ActivityTimeline({ 
+const ActivityTimeline = forwardRef(({
   leadId, 
   onRefresh,
   filterType = "ALL",
   searchQuery = ""
-}: { 
+}: {
   leadId: string; 
   onRefresh?: () => void;
   filterType?: string;
   searchQuery?: string;
-}) {
+}, ref) => {
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [activeFilter, setActiveFilter] = useState("ALL");
 
   // 1. FETCH SEMUA AKTIVITAS
-  const fetchTimeline = async () => {
+  const fetchTimeline = useCallback(async () => {
+    if (!leadId) return;
     try {
       setLoading(true);
       const res = await apiClient.get(`/leads/${leadId}`);
@@ -52,16 +53,38 @@ export default function ActivityTimeline({
       combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
       setActivities(combined);
+      if (onRefresh) onRefresh();
     } catch (error) {
-      console.error("Gagal ambil timeline:", error);
+      console.error("Failed to retrieve timeline:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [leadId, onRefresh]);
+
+  useImperativeHandle(ref, () => ({
+    refresh: () => fetchTimeline()
+  }));
 
   useEffect(() => {
     if (leadId) fetchTimeline();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId]);
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        {[1, 2, 3].map((n) => (
+          <div key={n} className="animate-pulse flex gap-3 p-4 border border-gray-100 dark:border-gray-700 rounded-lg">
+            <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/4" />
+              <div className="h-3 bg-gray-100 dark:bg-gray-800 rounded w-full" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   // Helper untuk Icon
   const getIcon = (type: string) => {
@@ -215,4 +238,6 @@ export default function ActivityTimeline({
       )}
     </div>
   );
-}
+}); 
+ActivityTimeline.displayName = "ActivityTimeline";
+export default ActivityTimeline;

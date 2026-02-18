@@ -359,7 +359,6 @@ export default function LeadsPage() {
 
   // --- GANTI USEEFFECT ANDA DENGAN INI ---
   useEffect(() => {
-    // 1. Cek apakah elemen sudah ada. Jika loading, elemen ini null.
     const track = trackRef.current;
     const thumb = thumbRef.current;
     const scroll = scrollRef.current;
@@ -444,9 +443,7 @@ export default function LeadsPage() {
       window.removeEventListener("mouseup", onMouseUp);
       scroll.removeEventListener("scroll", onScroll);
     };
-    
-    // PENTING: Jalankan ulang efek ini jika loading selesai atau data berubah
-  }, [isLoading, localLeads]);
+      }, [isLoading, localLeads]);
 
   // --- CONDITIONAL RENDERING (LOADING/ERROR) ---
   if (isLoading) {

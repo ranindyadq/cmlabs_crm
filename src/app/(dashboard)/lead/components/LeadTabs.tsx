@@ -6,7 +6,7 @@ import {
   Search,
   ChevronDown,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 
 import ActivityTimeline from "./lead-tabs/ActivityTimeline";
@@ -29,20 +29,18 @@ export function LeadTabs({ lead, onRefresh }: { lead: any; onRefresh: () => void
     return "Activity Timeline";
   });
 
-  // Sync tab dari query param jika berubah
   useEffect(() => {
     const urlTab = searchParams.get('tab');
     if (urlTab && urlTab !== activeTab) {
       setActiveTab(urlTab);
-    }
+    }// eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   useEffect(() => {
     localStorage.setItem("activeLeadTab", activeTab);
   }, [activeTab]);
   
-  // State untuk semua modal form
-  const [showAddActivity, setShowAddActivity] = useState(false); // BARU - untuk Activity Timeline
+  const [showAddActivity, setShowAddActivity] = useState(false); 
   const [showAddNote, setShowAddNote] = useState(false);
   const [showAddMeeting, setShowAddMeeting] = useState(false);
   const [showAddCall, setShowAddCall] = useState(false);
@@ -53,8 +51,7 @@ export function LeadTabs({ lead, onRefresh }: { lead: any; onRefresh: () => void
   const [activeFilter, setActiveFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   
-  // Track refresh key untuk Activity Timeline
-  const [refreshKey, setRefreshKey] = useState(0);
+  const timelineRef = useRef<any>(null);
   
   const activityCounts = lead.activityCounts || {
     notes: 0,
@@ -163,7 +160,7 @@ export function LeadTabs({ lead, onRefresh }: { lead: any; onRefresh: () => void
 
   // Handler untuk refresh setelah create activity
   const handleActivityCreated = () => {
-    setRefreshKey(prev => prev + 1);
+    timelineRef.current?.refresh();
     onRefresh();
   };
 
@@ -277,7 +274,7 @@ export function LeadTabs({ lead, onRefresh }: { lead: any; onRefresh: () => void
       <div className="flex-1 overflow-y-auto p-4 min-h-0 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent">
         {activeTab === "Activity Timeline" && (
           <ActivityTimeline 
-            key={refreshKey} 
+            ref={timelineRef}
             leadId={lead.id} 
             onRefresh={onRefresh} 
             filterType={activeFilter} 

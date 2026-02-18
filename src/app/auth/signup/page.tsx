@@ -49,7 +49,7 @@ export default function SignUpPage() {
       // Redirect ke Sign In
       setTimeout(() => {
         router.push("/auth/signin"); // Sesuaikan path login Anda
-      }, 2000);
+      }, 500);
 
     } catch (err: any) {
       console.error(err);

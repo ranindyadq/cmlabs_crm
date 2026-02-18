@@ -5,26 +5,45 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const [isAuthorized, setIsAuthorized] = useState(false);
+  // 3 Status: sedang mengecek, boleh masuk, atau ditendang
+  const [authStatus, setAuthStatus] = useState<"checking" | "authorized" | "unauthorized">("checking");
 
   useEffect(() => {
-    // 🔍 CEK DI KEDUA SAKU
+    // 1. Cek token di kedua tempat (Local & Session)
     const token = localStorage.getItem("token") || sessionStorage.getItem("token");
 
-    if (!token) {
-      // Kosong melompong -> Usir
-      router.replace("/auth/signin");
+    if (token) {
+      // Punya Karcis -> Silakan masuk
+      setAuthStatus("authorized");
     } else {
-      // Ada tiket -> Silakan masuk
-      setIsAuthorized(true);
+      // Tidak Punya Karcis -> Dilarang masuk
+      setAuthStatus("unauthorized");
+      
+      // 🚀 KUNCI PERBAIKAN: Gunakan window.location agar tidak nyangkut di Next.js Router
+      window.location.replace("/auth/signin"); 
     }
-  }, [router]);
+  }, []);
 
-  if (!isAuthorized) {
-    return null; // Atau return loading spinner
+  // 2. Tampilan saat Sedang Mengecek (Muncul Sepersekian Detik)
+  if (authStatus === "checking") {
+    return (
+      <div className="min-h-screen w-full flex flex-col justify-center items-center bg-gray-50 dark:bg-gray-900">
+        <Loader2 className="w-10 h-10 text-[#5A4FB5] animate-spin mb-4" />
+        <p className="text-gray-500 text-sm font-medium animate-pulse">Checking authentication...</p>
+      </div>
+    );
   }
 
-  // Render halaman asli jika lolos
+  // 3. Tampilan saat Dilarang Masuk (Sambil menunggu dipindah ke halaman Login)
+  if (authStatus === "unauthorized") {
+    return (
+      <div className="min-h-screen w-full flex flex-col justify-center items-center bg-gray-50 dark:bg-gray-900">
+        <Loader2 className="w-10 h-10 text-red-500 animate-spin mb-4" />
+        <p className="text-gray-500 text-sm font-medium animate-pulse">Session expired. Redirecting to login...</p>
+      </div>
+    );
+  }
+
+  // 4. Jika Sukses -> Tampilkan Layout Dashboard
   return <>{children}</>;
 }

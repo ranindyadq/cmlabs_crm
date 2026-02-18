@@ -40,24 +40,20 @@ apiClient.interceptors.response.use(
     const status = error.response ? error.response.status : null;
     const url = error.config?.url || '';
 
-    // Skip redirect untuk endpoint auth (hindari infinite loop)
     const isAuthEndpoint = url.includes('/auth/');
 
     if (status === 401 && !isAuthEndpoint) {
       console.warn("💀 Sesi berakhir (401). Redirect ke login...");
       
-      // Hapus token dari storage
       localStorage.removeItem("token");
       sessionStorage.removeItem("token");
       
-      // Panggil logout API untuk clear httpOnly cookie
       try {
         await fetch('/api/auth/logout', { method: 'POST' });
       } catch (e) {
         console.error("Failed to call logout API", e);
       }
       
-      // Redirect ke halaman login
       window.location.href = '/auth/signin';
     }
 

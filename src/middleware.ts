@@ -23,7 +23,25 @@ const authRoutes = [
   '/auth/reset-status',
 ];
 
+const allowedOrigins = ['http://localhost:3000', 'https://cmlabs-crm-7.vercel.app'];
+
 export function middleware(request: NextRequest) {
+  const origin = request.headers.get('origin');
+  const response = NextResponse.next();
+
+  // Jika origin ada dalam daftar yang diizinkan
+  if (origin && allowedOrigins.includes(origin)) {
+    response.headers.set('Access-Control-Allow-Origin', origin);
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    response.headers.set('Access-Control-Max-Age', '86400');
+  }
+
+  // Handle preflight requests (OPTIONS)
+  if (request.method === 'OPTIONS') {
+    return new NextResponse(null, { status: 204, headers: response.headers });
+  }
+  
   const { pathname } = request.nextUrl;
   
   // Skip API routes dan static files

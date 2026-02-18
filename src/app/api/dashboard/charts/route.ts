@@ -83,16 +83,13 @@ export async function GET(req: Request) {
         current.setMonth(current.getMonth() + 1);
     }
 
-    // Mapping Data ke Bulan-Bulan Tersebut
     const monthlyStats = allMonths.map((monthLabel) => {
-      // Filter leads yang label bulannya COCOK dengan label di chart
       const leadsInThisMonth = leads.filter(l => {
         const d = new Date(l.createdAt);
         const leadLabel = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
         return leadLabel === monthLabel;
       });
 
-      // (LOGIC HITUNG DI BAWAH INI SAMA PERSIS DENGAN KODE LAMA ANDA)
       const count = leadsInThisMonth.length;
       const estimation = leadsInThisMonth.reduce((acc, curr) => acc + Number(curr.value || 0), 0);
       const realisation = leadsInThisMonth
@@ -107,7 +104,6 @@ export async function GET(req: Request) {
       };
     });
 
-    // Pisahkan hasil (SAMA)
     const leadsByMonth = monthlyStats.map(m => ({ 
       month: m.month, 
       count: m.count 

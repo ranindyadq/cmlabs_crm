@@ -164,6 +164,10 @@ export default function DashboardPage() {
 
   // Fetch Dashboard Data
   useEffect(() => {
+    // 1. Inisialisasi AbortController
+    const controller = new AbortController();
+    const signal = controller.signal;
+
     const fetchDashboardData = async () => {
       try {
         setIsLoading(true);
@@ -174,21 +178,35 @@ export default function DashboardPage() {
         if (appliedFilters.startDate) params.startDate = appliedFilters.startDate;
         if (appliedFilters.endDate) params.endDate = appliedFilters.endDate;
 
+        // 2. Masukkan 'signal' ke dalam konfigurasi Axios
         const [metricsRes, chartsRes] = await Promise.all([
-          apiClient.get("/dashboard/metrics", { params }),
-          apiClient.get("/dashboard/charts", { params }),
+          apiClient.get("/dashboard/metrics", { params, signal }),
+          apiClient.get("/dashboard/charts", { params, signal }),
         ]);
 
         setMetrics(metricsRes.data.data);
         setCharts(chartsRes.data.data);
-      } catch (error) {
+      } catch (error: any) {
+        // 3. Tangkap error jika request sengaja dibatalkan
+        if (error.name === "CanceledError" || error.code === "ERR_CANCELED") {
+          console.log("Request dibatalkan karena filter berubah cepat.");
+          return; // Hentikan eksekusi, jangan ubah state ke false!
+        }
         console.error("Failed to load dashboard data:", error);
       } finally {
-        setIsLoading(false);
+        // Hanya matikan loading jika request tidak dibatalkan
+        if (!signal.aborted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchDashboardData();
+
+    // 4. Cleanup function: Bunuh request lama jika useEffect dipanggil ulang
+    return () => {
+      controller.abort();
+    };
   }, [appliedFilters]);
 
   // --- HANDLERS ---

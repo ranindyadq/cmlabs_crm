@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "postinstall": "prisma generate",
-    "test": "jest"
+    "test:db:setup": "dotenv -e .env.test -- npx prisma db push",
+    "test": "npm run test:db:setup && dotenv -e .env.test -- jest",
+    "test:watch": "dotenv -e .env.test -- jest --watch"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
@@ -37,6 +39,7 @@
     "jose": "^6.1.3",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.2",
+    "lru-cache": "^11.2.6",
     "lucide-react": "^0.424.0",
     "next": "14.2.5",
     "next-themes": "^0.3.0",
@@ -52,6 +55,8 @@
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -71,14 +76,19 @@
     "@types/react": "^18.3.3",
     "@types/react-datepicker": "^6.2.0",
     "@types/react-dom": "^18.3.0",
+    "@types/supertest": "^6.0.3",
     "autoprefixer": "^10.4.20",
+    "dotenv-cli": "^11.0.0",
     "eslint": "^8",
     "eslint-config-next": "14.2.5",
     "jest": "^30.2.0",
     "jest-environment-jsdom": "^30.2.0",
+    "node-mocks-http": "^1.17.2",
     "postcss": "^8.4.41",
     "prisma": "^5.22.0",
+    "supertest": "^7.2.2",
     "tailwindcss": "^3.4.19",
+    "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

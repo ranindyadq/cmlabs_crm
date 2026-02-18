@@ -1,0 +1,126 @@
+import { PATCH, DELETE } from '@/app/api/leads/[id]/route';
+import { POST } from '@/app/api/leads/route';
+import { prisma } from '@/lib/prisma';
+import { NextRequest } from 'next/server';
+
+const mockAdminSession = { id: '', role: 'ADMIN', email: 'admin@cmlabs.co' };
+const mockSalesSession = { id: '', role: 'SALES', email: 'sales@cmlabs.co' };
+
+jest.mock('@/lib/auth-helper', () => ({
+  getSessionUser: jest.fn(async (req: Request) => {
+    const auth = req.headers.get('authorization');
+    if (auth === 'Bearer admin-token') return mockAdminSession;
+    if (auth === 'Bearer sales-token') return mockSalesSession;
+    return null;
+  }),
+}));
+
+function createMockRequest(url: string, method: string, body?: any, token?: string) {
+  const headers = new Headers();
+  if (method === 'POST' || method === 'PATCH' || method === 'PUT') {
+    headers.set('content-type', 'application/json');
+  }
+  if (token) {
+    headers.set('authorization', `Bearer ${token}`);
+  }
+
+  return new NextRequest(`http://localhost:3000${url}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+describe('Leads API - Role Based Access Control (RBAC)', () => {
+  let adminLeadId = "";
+  let salesLeadId = "";
+
+  beforeAll(async () => {
+    // 1. Setup Roles di DB Test
+    const roleAdmin = await prisma.role.create({ data: { name: 'ADMIN' } });
+    const roleSales = await prisma.role.create({ data: { name: 'SALES' } });
+
+    // 2. Setup Users di DB Test
+    const adminUser = await prisma.user.create({
+      data: { fullName: 'Admin User', email: mockAdminSession.email, passwordHash: 'hash', status: 'ACTIVE', roleId: roleAdmin.id }
+    });
+    const salesUser = await prisma.user.create({
+      data: { fullName: 'Sales User', email: mockSalesSession.email, passwordHash: 'hash', status: 'ACTIVE', roleId: roleSales.id }
+    });
+
+    // 3. Sinkronisasi ID untuk Mock Session
+    mockAdminSession.id = adminUser.id;
+    mockSalesSession.id = salesUser.id;
+
+    // 4. Buat Lead milik Admin (Target yang akan dibajak oleh Sales)
+    const adminLead = await prisma.lead.create({
+      data: { title: "Lead Rahasia Admin", value: 50000000, stage: "Lead In", ownerId: adminUser.id }
+    });
+    adminLeadId = adminLead.id;
+
+    // 5. Buat Lead milik Sales (Target sah milik Sales)
+    const salesLead = await prisma.lead.create({
+      data: { title: "Lead Milik Sales", value: 10000000, stage: "Lead In", ownerId: salesUser.id }
+    });
+    salesLeadId = salesLead.id;
+  });
+
+  // ==========================================
+  // SCENARIO 1: AKSES DITOLAK (FORBIDDEN)
+  // ==========================================
+  describe('Skenario Negatif (Akses Ditolak)', () => {
+    
+    it('SALES seharusnya DITOLAK (403) saat mencoba mengubah Lead milik Admin', async () => {
+      const payload = { title: "Dibajak oleh Sales" };
+      const req = createMockRequest(`/api/leads/${adminLeadId}`, 'PATCH', payload, 'sales-token');
+      
+      // Panggil endpoint dinamis [id]
+      const res = await PATCH(req, { params: { id: adminLeadId } });
+      if (!res) throw new Error("Response is undefined");
+
+      expect(res.status).toBe(403);
+      const data = await res.json();
+      expect(data.message).toBe("Forbidden: You don't have permission");
+    });
+
+    it('SALES seharusnya DITOLAK (403) saat mencoba menghapus Lead milik Admin', async () => {
+      const req = createMockRequest(`/api/leads/${adminLeadId}`, 'DELETE', null, 'sales-token');
+      
+      const res = await DELETE(req, { params: { id: adminLeadId } });
+      if (!res) throw new Error("Response is undefined");
+
+      expect(res.status).toBe(403);
+    });
+  });
+
+  // ==========================================
+  // SCENARIO 2: AKSES DIIZINKAN (SUCCESS)
+  // ==========================================
+  describe('Skenario Positif (Akses Diizinkan)', () => {
+
+    it('SALES diizinkan (200) mengubah Lead miliknya sendiri', async () => {
+      const payload = { title: "Lead Sales Telah Diupdate" };
+      const req = createMockRequest(`/api/leads/${salesLeadId}`, 'PATCH', payload, 'sales-token');
+      
+      const res = await PATCH(req, { params: { id: salesLeadId } });
+      if (!res) throw new Error("Response is undefined");
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.data.title).toBe("Lead Sales Telah Diupdate");
+    });
+
+    it('ADMIN diizinkan (200) mengubah Lead milik siapa saja (termasuk milik Sales)', async () => {
+      const payload = { title: "Diedit oleh Super Admin" };
+      // Admin menggunakan tokennya untuk mengedit data milik Sales
+      const req = createMockRequest(`/api/leads/${salesLeadId}`, 'PATCH', payload, 'admin-token');
+      
+      const res = await PATCH(req, { params: { id: salesLeadId } });
+      if (!res) throw new Error("Response is undefined");
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.data.title).toBe("Diedit oleh Super Admin");
+    });
+  });
+});

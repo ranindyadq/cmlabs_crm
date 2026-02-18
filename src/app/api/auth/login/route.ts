@@ -1,13 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import rateLimit from "@/lib/rate-limit";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import { serialize } from 'cookie';
-import { JWT_SECRET } from '@/lib/constants';
+import { signToken, setAuthCookie, sanitizeUser } from '@/lib/auth-helper';
 import { logAudit } from "@/lib/audit";
+import { withLogging } from '@/lib/api-handler';
 
-export async function POST(req: Request) {
+const limiter = rateLimit({
+  interval: 60 * 1000, 
+  uniqueTokenPerInterval: 500, 
+});
+
+export const POST = withLogging(async (req: NextRequest) => {
   try {
+    const ip = req.ip ?? req.headers.get('x-forwarded-for') ?? 'unknown_ip';
+    try {
+        // Batasi maksimal 5 percobaan per IP Address dalam interval waktu di atas
+        await limiter.check(5, ip);
+      } catch {
+        // Jika melebihi 5 kali, langsung tolak tanpa menyentuh Database (Menghemat resource)
+        return NextResponse.json(
+          { message: 'Terlalu banyak percobaan login. Silakan coba lagi dalam 1 menit.' },
+          { status: 429 } 
+        );
+      }
+
     const body = await req.json();
     const { email, password, rememberMe } = body;
 
@@ -31,53 +48,33 @@ export async function POST(req: Request) {
         message: `Access denied. Your account has been deactivated by Admin.`,
       }, { status: 403 });
     }
-    
-    const MAX_AGE_NORMAL = 60 * 60 * 8; 
-    const MAX_AGE_REMEMBER = 60 * 60 * 24 * 30; 
-    const tokenDuration = rememberMe ? '30d' : '8h';
-    const cookieDuration = rememberMe ? MAX_AGE_REMEMBER : MAX_AGE_NORMAL;
 
-    // 4. Generate JWT
-    const token = jwt.sign(
-      { 
-        sub: user.id, 
-        email: user.email, 
-        role: user.role.name,
-        status: user.status
-      },
-      JWT_SECRET,
-      { expiresIn: tokenDuration }
-    );
+    const tokenPayload = { 
+      sub: user.id, 
+      email: user.email, 
+      role: user.role.name,
+      status: user.status
+    };
 
-    // 5. Set Cookie (HttpOnly)
-    const cookie = serialize('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: cookieDuration,
-    });
+    const token = await signToken(tokenPayload, rememberMe);
+    const cookie = setAuthCookie(token, rememberMe);
 
-    // 6. Update Last Login & Audit
     await prisma.user.update({
       where: { id: user.id },
       data: { lastLogin: new Date() },
     });
     await logAudit(user.id, user.id, 'USER_SIGNIN_SUCCESS', { method: 'email/password' });
 
-    // 7. RETURN RESPONSE
+    const safeUser = sanitizeUser({
+      ...user,
+      role: user.role.name 
+    });
+
     const response = NextResponse.json({
       message: 'Login successful.',
       token, 
       role: user.role.name,
-      user: {
-          id: user.id,
-          name: user.fullName,
-          email: user.email,
-          role: user.role.name,
-          status: user.status,
-          photo: user.photo || null 
-      }
+      user: safeUser
     }, { status: 200 });
 
     response.headers.set('Set-Cookie', cookie);
@@ -87,4 +84,4 @@ export async function POST(req: Request) {
     console.error('Error in signIn:', error);
     return NextResponse.json({ message: 'Server error during login.' }, { status: 500 });
   }
-}
+});

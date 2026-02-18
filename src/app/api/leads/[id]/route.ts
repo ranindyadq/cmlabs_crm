@@ -32,15 +32,18 @@ const buildLeadInclude = (searchParams: URLSearchParams) => {
     // JANGAN tambahkan include activities di sini
   };
 
+  const LIMIT_TIMELINE = 20;
+
   // Logika Filter Jenis Aktivitas (Hanya include jika type sesuai atau kosong)
   if (!activity_type || activity_type === 'NOTE') {
-    includeCondition.notes = { where: activityWhere.notes, orderBy: { createdAt: 'desc' } };
+    includeCondition.notes = { where: activityWhere.notes, orderBy: { createdAt: 'desc' }, take: LIMIT_TIMELINE };
   }
 
   if (!activity_type || activity_type === 'MEETING') {
     includeCondition.meetings = {
       where: activityWhere.meetings,
       orderBy: { startTime: 'desc' },
+      take: LIMIT_TIMELINE,
       include: {
         organizer: { select: { id: true, fullName: true } },
         attendees: { select: { user: { select: { id: true, fullName: true } } } }
@@ -49,18 +52,19 @@ const buildLeadInclude = (searchParams: URLSearchParams) => {
   }
 
   if (!activity_type || activity_type === 'CALL') {
-    includeCondition.calls = { where: activityWhere.calls, orderBy: { callTime: 'desc' } };
+    includeCondition.calls = { where: activityWhere.calls, orderBy: { callTime: 'desc' }, take: LIMIT_TIMELINE, };
   }
 
   if (!activity_type || activity_type === 'EMAIL') {
-    includeCondition.emails = { where: activityWhere.emails, orderBy: { sentAt: 'desc' } };
+    includeCondition.emails = { where: activityWhere.emails, orderBy: { sentAt: 'desc' }, take: LIMIT_TIMELINE };
   }
 
   if (!activity_type || activity_type === 'INVOICE') {
     includeCondition.invoices = { 
       where: activityWhere.invoices, 
       // GANTI createdAt menjadi invoiceDate
-      orderBy: { invoiceDate: 'desc' } 
+      orderBy: { invoiceDate: 'desc' },
+      take: LIMIT_TIMELINE,
     };
   }
 

@@ -29,7 +29,7 @@ export default function ContactDetailPage() {
     }
   }, [params.id, leadsPage]);
 
-  if (loading) return <div className="p-6 sm:p-10 text-center text-gray-400 dark:text-gray-500 animate-pulse">Loading profile...</div>;
+  if (loading) return <div className="p-6 sm:p-10 text-center text-gray-400 dark:text-gray-500 animate-pulse"></div>;
   if (!contact) return <div className="p-6 sm:p-10 text-center text-red-500 dark:text-red-400">Contact not found.</div>;
 
   // Initials for Avatar

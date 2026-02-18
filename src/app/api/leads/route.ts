@@ -76,16 +76,23 @@ export async function GET(req: Request) {
        if (picIdParam) finalWhere.ownerId = picIdParam;
     }
 
-    // 4. QUERY DATABASE
     const [leads, totalLeads] = await prisma.$transaction([
       prisma.lead.findMany({
-        where: finalWhere, // <--- Pakai finalWhere yang sudah aman
+        where: finalWhere, 
         skip: skip,
         take: limit,
-        include: {
-          owner: { select: { fullName: true, email: true, photo: true } }, // Tambah photo biar UI bagus
-          contact: true,
-          company: true,
+        select: {
+          id: true,
+          title: true,
+          value: true,
+          currency: true,
+          status: true,
+          stage: true,
+          createdAt: true,
+          
+          owner: { select: { fullName: true, email: true, photo: true } }, 
+          contact: { select: { name: true, email: true, phone: true } }, 
+          company: { select: { name: true } },
           labels: { include: { label: true } }
         },
         orderBy: { createdAt: 'desc' },
@@ -97,7 +104,7 @@ export async function GET(req: Request) {
 
     const formattedLeads = leads.map(lead => ({
       ...lead,
-      value: lead.value ? Number(lead.value) : 0, // Konversi Decimal ke Number JavaScript
+      value: lead.value ? Number(lead.value) : 0, 
     }));
 
     return NextResponse.json({

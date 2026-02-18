@@ -1,18 +1,20 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import InputWithLabel from "@/components/ui/InputWithLabel";
 import AuthLayout from "@/components/layouts/AuthLayout";
 import { FcGoogle } from "react-icons/fc";
 import { Sun, Moon } from "lucide-react";
 import { useTheme } from "@/lib/context/ThemeContext";
 import apiClient from "@/lib/apiClient";
+import toast from "react-hot-toast";
 
 export default function SignInPage() {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // 🧠 state untuk input form
   const [email, setEmail] = useState("");
@@ -23,14 +25,29 @@ export default function SignInPage() {
   const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
-    // Cek apakah ada token di saku manapun
-    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
-    
-    if (token) {
-      // Kalau ada, jangan kasih lihat form login. Langsung lempar ke Dashboard.
-      router.replace("/dashboard");
+    // Jika URL mengandung ?expired=true
+    if (searchParams.get("expired") === "true") {
+      toast.error("Sesi Anda telah berakhir. Silakan login kembali.", {
+        duration: 5000,
+        id: "session-expired", // Mencegah toast muncul dobel
+      });
+      
+      // Opsional: Hapus token sisa dari localStorage jika ada yang tersangkut
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("user");
+      
+      // Bersihkan URL agar toast tidak muncul terus jika user refresh halaman
+      router.replace("/auth/signin");
+    } else {
+      // Normal flow: Cek token aktif
+      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+      if (token) {
+        router.replace("/dashboard");
+      }
     }
-  }, [router]);
+  }, [router, searchParams]);
 
   // 💥 fungsi login ke backend
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -65,12 +82,13 @@ export default function SignInPage() {
         }
 
         // 3. REDIRECT
-        // Kita pakai replace agar user tidak bisa klik 'Back' ke login
-        console.log("🚀 Redirecting to Dashboard...");
-        router.replace("/dashboard"); 
+        const callbackUrl = searchParams.get("callbackUrl");
+        if (callbackUrl) {
+           router.replace(callbackUrl);
+        } else {
+           router.replace("/dashboard"); 
+        }
         
-        // JANGAN pakai window.location.href dulu biar kita lihat log-nya
-        // router.replace lebih cepat di Next.js
         return;
       }
 

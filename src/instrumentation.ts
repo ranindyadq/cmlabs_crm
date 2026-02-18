@@ -1,20 +1,20 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    // 1. Import Winston (Hanya di runtime nodejs)
+    const logger = (await import('./lib/logger')).default;
     
-    // Cek apakah kita sedang di Local Development
-    // Vercel selalu set NODE_ENV=production saat deploy
+    logger.info(`🏗️ Application starting in ${process.env.NODE_ENV} mode...`);
+
     if (process.env.NODE_ENV === 'development') { 
-        
         const { startReminderScheduler } = await import('./services/reminder.service');
 
-        // Singleton check untuk hot-reload di dev
         if (!(global as any).reminderSchedulerStarted) {
-            console.log("🚀 [LOCAL MODE] Starting Reminder Scheduler (Node-Cron)...");
+            logger.info("🚀 [LOCAL MODE] Starting Reminder Scheduler (Node-Cron)...");
             startReminderScheduler();
             (global as any).reminderSchedulerStarted = true;
         }
     } else {
-        console.log("☁️ [PRODUCTION MODE] Scheduler disabled. Waiting for Vercel Cron trigger.");
+        logger.info("☁️ [PRODUCTION MODE] Scheduler disabled. Waiting for Vercel Cron trigger.");
     }
   }
 }

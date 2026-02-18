@@ -29,7 +29,7 @@ export default function CompanyDetailPage() {
     }
   }, [params.id, leadsPage]);
 
-  if (loading) return <div className="p-6 sm:p-10 text-center text-gray-400 dark:text-gray-500 animate-pulse">Loading company details...</div>;
+  if (loading) return <div className="p-6 sm:p-10 text-center text-gray-400 dark:text-gray-500 animate-pulse"></div>;
   if (!company) return <div className="p-6 sm:p-10 text-center text-red-500 dark:text-red-400">Company not found.</div>;
 
   return (

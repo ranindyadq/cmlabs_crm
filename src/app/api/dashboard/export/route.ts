@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth-helper";
 import { Parser } from 'json2csv';
 import PDFDocument from 'pdfkit';
+import path from 'path'; // 👈 TAMBAH INI
+import fs from 'fs';
 
 export const runtime = 'nodejs';
 
@@ -96,26 +98,46 @@ export async function GET(req: Request) {
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
 
+        let periodText = "All Time";
+        if (startDate && endDate) {
+            periodText = `${new Date(startDate).toLocaleDateString('id-ID')} - ${new Date(endDate).toLocaleDateString('id-ID')}`;
+        } else if (startDate) {
+            periodText = `Since ${new Date(startDate).toLocaleDateString('id-ID')}`;
+        }
+
+        // Menentukan PIC secara dinamis
+        let picText = user.email || 'Admin';
+        if (user.role === 'ADMIN') {
+            picText = picIdParam ? "Selected Sales Member" : "All Sales Team";
+        }
+
         // --- 1. HEADER SECTION ---
         // Garis Aksen Ungu di paling atas
         doc.rect(0, 0, 595.28, 10).fill('#5A4FB5'); // Lebar A4 full
 
-        // Logo (Pastikan path file benar, jika error hapus baris ini)
-        // doc.image('public/logo.png', 40, 40, { width: 40 });
+        try {
+          const logoPath = path.join(process.cwd(), 'public', 'logo.png');
+          if (fs.existsSync(logoPath)) {
+            // Gambar logo jika file benar-benar ada di folder public/logo.png
+            doc.image(logoPath, 40, 30, { width: 100 }); 
+          }
+        } catch (err) {
+          console.log("Logo file not found, skipping rendering logo.");
+        }
 
         // Judul Laporan
         doc.moveDown(2);
         doc.fillColor('#333333').font('Helvetica-Bold').fontSize(20)
-           .text('Quarterly Evaluation Report', 40, 50, { align: 'left' });
+           .text('Quarterly Evaluation Report', 40, 80, { align: 'left' });
 
         // Metadata Laporan (Kanan Atas)
         doc.fontSize(10).font('Helvetica')
            .text(`Generated: ${new Date().toLocaleDateString('id-ID')}`, 400, 50, { align: 'right' })
-           .text(`Period: Q3 2025`, 400, 65, { align: 'right' })
-           .text(`PIC: Admin`, 400, 80, { align: 'right' });
+           .text(`Period: ${periodText}`, 400, 65, { align: 'right' })
+           .text(`PIC: ${picText}`, 400, 80, { align: 'right' });
 
         // Garis Pembatas
-        doc.moveTo(40, 100).lineTo(555, 100).lineWidth(0.5).strokeColor('#E0E0E0').stroke();
+        doc.moveTo(40, 110).lineTo(555, 110).lineWidth(0.5).strokeColor('#E0E0E0').stroke();
 
         // --- 2. SUMMARY CARDS (Kotak Ringkasan) ---
         const totalValue = leads.reduce((acc, curr) => acc + Number(curr.value), 0);
@@ -124,20 +146,26 @@ export async function GET(req: Request) {
         // Fungsi Helper Gambar Kartu
         const drawCard = (x: number, title: string, value: string, color: string) => {
             // Background Card
-            doc.roundedRect(x, 120, 120, 60, 5).fillAndStroke('#F9FAFB', '#E5E7EB');
+            doc.roundedRect(x, 130, 120, 60, 5).fillAndStroke('#F9FAFB', '#E5E7EB');
             // Title
-            doc.fillColor('#666666').fontSize(8).font('Helvetica').text(title, x + 10, 130);
+            doc.fillColor('#666666').fontSize(8).font('Helvetica').text(title, x + 10, 140);
             // Value
-            doc.fillColor(color).fontSize(14).font('Helvetica-Bold').text(value, x + 10, 150);
+            doc.fillColor(color).fontSize(14).font('Helvetica-Bold').text(value, x + 10, 160);
         };
 
-        drawCard(40, 'TOTAL REVENUE', `IDR ${totalValue.toLocaleString('id-ID')}`, '#5A4FB5'); // Ungu
+        const formatNumber = (num: number) => {
+            if (num >= 1000000000) return `IDR ${(num / 1000000000).toFixed(1)}B`;
+            if (num >= 1000000) return `IDR ${(num / 1000000).toFixed(1)}M`;
+            return `IDR ${num.toLocaleString('id-ID')}`;
+        };
+
+        drawCard(40, 'TOTAL REVENUE', formatNumber(totalValue), '#5A4FB5'); 
         drawCard(170, 'TOTAL LEADS', leads.length.toString(), '#333333');
-        drawCard(300, 'DEALS WON', totalWon.toString(), '#257047'); // Hijau
-        drawCard(430, 'AVG DEAL SIZE', `IDR ${(leads.length > 0 ? totalValue/leads.length : 0).toLocaleString('id-ID')}`, '#333333');
+        drawCard(300, 'DEALS WON', totalWon.toString(), '#257047'); 
+        drawCard(430, 'AVG DEAL SIZE', formatNumber(leads.length > 0 ? totalValue/leads.length : 0), '#333333');
 
         // --- 3. TABEL DATA ---
-        let y = 210; // Start Y Tabel
+        let y = 220;
         
         // Header Tabel
         doc.rect(40, y, 515, 25).fill('#5A4FB5'); // Header Ungu Solid
@@ -155,10 +183,17 @@ export async function GET(req: Request) {
         
         leads.forEach((lead, i) => {
             // Cek Halaman Baru
-            if (y > 750) {
+            if (y > 730) {
                 doc.addPage();
-                y = 50; 
-                // Gambar ulang header tabel di halaman baru (opsional)
+                y = 40;
+                doc.rect(40, y, 515, 25).fill('#5A4FB5'); 
+                doc.fillColor('#FFFFFF').fontSize(9).font('Helvetica-Bold');
+                doc.text('DEAL TITLE', 50, y + 8);
+                doc.text('OWNER', 220, y + 8);
+                doc.text('STATUS', 320, y + 8, { width: 60, align: 'center' });
+                doc.text('VALUE (IDR)', 400, y + 8, { width: 140, align: 'right' });
+                y += 25;
+                doc.font('Helvetica').fontSize(9);
             }
 
             // Zebra Striping (Baris Genap dikasih background abu)
@@ -173,8 +208,8 @@ export async function GET(req: Request) {
             else statusColor = '#FFAB00'; // Kuning/Warning
 
             // Isi Data
-            doc.fillColor('#333333').text(lead.title.substring(0, 30), 50, y + 6);
-            doc.text(lead.owner?.fullName || '-', 220, y + 6);
+            doc.fillColor('#333333').text(lead.title, 50, y + 6, { width: 160, height: 12, ellipsis: true });
+            doc.text(lead.owner?.fullName || '-', 220, y + 6, { width: 90, height: 12, ellipsis: true });
             
             doc.fillColor(statusColor).font('Helvetica-Bold')
                .text(lead.status, 320, y + 6, { width: 60, align: 'center' });
@@ -186,15 +221,20 @@ export async function GET(req: Request) {
         });
 
         // Footer Numbering
-        const range = doc.bufferedPageRange();
-        for (let i = range.start; i < range.start + range.count; i++) {
+        const pages = doc.bufferedPageRange();
+        for (let i = 0; i < pages.count; i++) {
             doc.switchToPage(i);
+            
+            // Garis pembatas footer
+            doc.moveTo(40, 780).lineTo(555, 780).lineWidth(0.5).strokeColor('#E0E0E0').stroke();
+            
+            // Teks Footer
             doc.fontSize(8).fillColor('#AAAAAA')
-               .text(`Page ${i + 1} of ${range.count} | Confidential cmlabs CRM`, 40, 800, { align: 'center' });
+               .text(`Page ${i + 1} of ${pages.count} | Generated from cmlabs CRM`, 40, 790, { align: 'center' });
         }
 
         doc.end();
-    });
+      });
 
       return new NextResponse(pdfBuffer as any, {
         headers: {

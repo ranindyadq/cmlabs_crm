@@ -60,7 +60,7 @@ function GlobalSearchContent() {
         
         {query ? (
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Results for: <span className="font-semibold text-[#5A4FB5] dark:text-[#7a6fd6]">"{query}"</span>
+            Results for: <span className="font-semibold text-[#5A4FB5] dark:text-[#7a6fd6]">{query}</span>
           </p>
         ) : (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Please enter a keyword to search.</p>
@@ -203,7 +203,7 @@ function GlobalSearchContent() {
               </div>
               <h3 className="text-sm sm:text-base font-semibold text-gray-800 dark:text-gray-200 mb-1">No results found</h3>
               <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 max-w-xs sm:max-w-sm">
-                No matches for "<span className="font-medium text-gray-900 dark:text-gray-100">{query}</span>". Try broader keywords.
+                No matches for <span className="font-medium text-gray-900 dark:text-gray-100">{query}</span>. Try broader keywords.
               </p>
             </div>
           )}

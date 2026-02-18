@@ -4,6 +4,7 @@
 import { useState } from "react";
 import apiClient from "@/lib/apiClient";
 import { X, ChevronDown } from "lucide-react";
+import { quickActivitySchema } from "@/validations/activity";
 
 interface AddActivityModalProps {
   leadId: string;
@@ -22,6 +23,7 @@ export default function AddActivityModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   const maxChars = 100;
 
@@ -45,15 +47,21 @@ export default function AddActivityModal({
   };
 
   const handleCreate = async () => {
-    if (!activityType) {
-      alert("Please select activity type");
-      return;
+    const validation = quickActivitySchema.safeParse({
+      activityType,
+      title,
+      description
+    });
+    if (!validation.success) {
+      // Mapping error dari Zod ke state `errors`
+      const fieldErrors: { [key: string]: string } = {};
+      validation.error.errors.forEach((err) => {
+        if (err.path[0]) fieldErrors[err.path[0].toString()] = err.message;
+      });
+      setErrors(fieldErrors);
+      return; // Berhenti di sini, jangan tembak API!
     }
-    if (!title.trim()) {
-      alert("Title is required");
-      return;
-    }
-
+    setErrors({}); // Bersihkan error jika lolos
     setSubmitting(true);
     try {
       // Create activity based on type
@@ -96,7 +104,7 @@ export default function AddActivityModal({
       }
 
       handleClose();
-      onSuccess?.();
+      if (onSuccess) onSuccess();
     } catch (error: any) {
       console.error("Error creating activity:", error);
       alert(error.response?.data?.message || "Failed to create activity");
@@ -158,6 +166,7 @@ export default function AddActivityModal({
                 placeholder="Enter Title"
                 className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#5A4FB5] focus:border-transparent"
               />
+              {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title}</p>}
             </div>
           </div>
 
@@ -178,6 +187,7 @@ export default function AddActivityModal({
                 {description.length}/{maxChars}
               </span>
             </div>
+            {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description}</p>}
           </div>
         </div>
 

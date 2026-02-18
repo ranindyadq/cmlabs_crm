@@ -173,10 +173,17 @@ model Lead {
   invoices          Invoice[]
   notifications      Notification[]     @relation("LeadNotifications")
 
-  @@index([stage])
-  @@index([ownerId])
-  @@index([createdAt])
-  @@map("leads")
+  @@index([stage])
+  @@index([createdAt]) 
+  @@index([closedAt]) 
+
+  @@index([deletedAt, ownerId])
+  
+  @@index([deletedAt, status])
+
+  @@index([deletedAt, ownerId, status])
+
+  @@map("leads")
 }
 
 // Model Label
@@ -217,7 +224,9 @@ model Note {
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id])
 
-  @@map("notes")
+  @@index([leadId])
+  @@index([createdAt]) 
+  @@map("notes")
 }
 
 // Model Rapat
@@ -241,7 +250,9 @@ model Meeting {
 
   attendees MeetingAttendee[]
 
-  @@map("meetings")
+  @@index([leadId])
+  @@index([startTime]) 
+  @@map("meetings")
 }
 
 // Model Pivot Rapat <-> Peserta
@@ -275,7 +286,9 @@ model Call {
   contactId String?  @map("contact_id")
   contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
-  @@map("calls")
+  @@index([leadId])
+  @@index([callTime])
+  @@map("calls")
 }
 
 // Model Email
@@ -297,7 +310,9 @@ model Email {
   userId String @map("user_id")
   user   User   @relation(fields: [userId], references: [id])
 
-  @@map("emails")
+  @@index([leadId])
+  @@index([sentAt])
+  @@map("emails")
 }
 
 // Model Tagihan
@@ -316,7 +331,9 @@ model Invoice {
   lead   Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
   items  InvoiceItem[]
 
-  @@map("invoices")
+  @@index([leadId])
+  @@index([invoiceDate])
+  @@map("invoices")
 }
 
 // Model Item Tagihan

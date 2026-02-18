@@ -144,7 +144,9 @@ export default function TeamPage() {
       fetchTeam();
     }, 500); 
     return () => clearTimeout(delayDebounceFn);
-  }, [query]);
+  }, 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [query]);
 
   // 3. HANDLER MENU ACTION
   const toggleMenu = (id: string, e: React.MouseEvent) => {

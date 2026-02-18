@@ -29,21 +29,15 @@ function HandleLoginProcess() {
       // B. Redirect ke Dashboard (Gunakan window.location agar refresh state penuh)
       console.log("✅ Login Sukses, mengalihkan ke Dashboard...");
       
-      // Delay kecil 500ms agar storage sempat tertulis (dan user lihat loading sebentar)
       setTimeout(() => {
         window.location.href = "/dashboard";
       }, 500);
 
     } else {
-      // JANGAN langsung redirect error dulu.
-      // Next.js kadang butuh waktu milidetik untuk populate searchParams.
-      // Biarkan user stay di loading screen, atau redirect manual jika benar-benar macet > 3 detik.
       console.log("⏳ Menunggu token terbaca...");
     }
   }, [searchParams, router]);
 
-  // TAMPILAN SKELETON / LOADING
-  // Ini yang akan dilihat user saat proses "di belakang layar"
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="flex flex-col items-center p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 animate-in fade-in zoom-in duration-300">

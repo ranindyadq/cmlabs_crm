@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth-helper";
+import { getSessionUser, sanitizeUser } from "@/lib/auth-helper";
 import { z } from "zod";
 
 // ==========================================
@@ -87,6 +87,8 @@ export async function PATCH(req: Request) {
 
     const finalManagerId = managerId === "" ? null : managerId;
 
+    let updatedUser;
+
     // --- MULAI TRANSAKSI DATABASE ---
     await prisma.$transaction(async (tx) => {
       // 1. Update Data User
@@ -98,7 +100,8 @@ export async function PATCH(req: Request) {
             fullName, 
             phone,
             managerId: finalManagerId
-        }
+        },
+        include: { role: true, workInfo: true }
       });
 
       // 2. Gunakan formattedSkills di dalam query
@@ -140,7 +143,10 @@ export async function PATCH(req: Request) {
       });
     });
 
-    return NextResponse.json({ message: "Profile updated successfully" });
+    return NextResponse.json({ 
+      message: "Profile updated successfully",
+      data: sanitizeUser(updatedUser)
+    });
 
   } catch (error) {
     console.error("Update profile error:", error);

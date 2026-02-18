@@ -77,7 +77,9 @@ export default function NotesTab({
 
   useEffect(() => {
     if (leadId) fetchNotes();
-  }, [leadId, filterType, searchQuery]);
+  }, 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [leadId, filterType, searchQuery]);
 
   const handleClose = () => {
     

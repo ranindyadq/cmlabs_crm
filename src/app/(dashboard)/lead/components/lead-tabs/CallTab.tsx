@@ -86,7 +86,7 @@ export default function CallTab({
     if (leadId) {
       fetchCalls();
       fetchContacts();
-    }
+    }// eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId]);
 
   // === HANDLERS ===

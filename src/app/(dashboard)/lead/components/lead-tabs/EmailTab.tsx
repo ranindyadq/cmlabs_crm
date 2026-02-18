@@ -205,6 +205,7 @@ export default function EmailTab({
   useEffect(() => { 
     if (leadId) fetchEmails();
     fetchCurrentUser(); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId])
 
   // === HANDLE EDIT (BARU) ===

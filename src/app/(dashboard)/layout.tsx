@@ -22,25 +22,8 @@ import {
 import { useTheme } from "@/lib/context/ThemeContext";
 import { SidebarProvider, useSidebar } from "@/lib/context/SidebarContext";
 import NotificationBell from "@/components/ui/NotificationBell";
-import { Suspense } from "react";
 import apiClient from "@/lib/apiClient";
-import DashboardSkeleton from "@/components/ui/DashboardSkeleton";
 import AuthGuard from "@/components/auth/AuthGuard";
-
-// Helper to get token from localStorage or sessionStorage
-function getToken() {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("token") || sessionStorage.getItem("token");
-  }
-  return null;
-}
-
-const getUser = () => {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("user") || sessionStorage.getItem("user");
-  }
-  return null;
-};
 
 // --- DASHBOARD CONTENT COMPONENT ---
 function DashboardContent({ children }: { children: ReactNode }) {
@@ -60,7 +43,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadUserData = async () => {
       // A. Check local data first (Optimistic UI)
-      const localData = getUser(); 
+      const localData = localStorage.getItem("user") || sessionStorage.getItem("user");
       
       if (localData) {
         try {
@@ -78,7 +61,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
 
       // B. Fetch latest data from server
       try {
-        const token = getToken();
+        const token = localStorage.getItem("token") || sessionStorage.getItem("token");
         if (token) {
           const res = await apiClient.get("/profile");
           const apiUser = res.data.data;
@@ -166,6 +149,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
 
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Logic Handle Search
@@ -192,7 +176,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (window.innerWidth < 768) {
       toggleSidebar(); // Close sidebar on mobile after navigation
-    }
+    } // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
   // Prevent scroll when sidebar is open on mobile
@@ -259,7 +243,6 @@ function DashboardContent({ children }: { children: ReactNode }) {
   ];
 
   return (
-    <AuthGuard>
       <div className="h-screen flex bg-[#F0F2F5] dark:bg-[#2B265E] text-[#2E2E2E] p-2 sm:p-3 gap-2 sm:gap-3 lg:gap-5 overflow-hidden">
         
         {/* === MOBILE OVERLAY (Backdrop) === */}
@@ -392,7 +375,7 @@ function DashboardContent({ children }: { children: ReactNode }) {
         </aside>
 
         {/* === MAIN SECTION === */}
-        <main className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
+        <main className="flex-1 flex flex-col h-full overflow-hidden min-w-0 ">
           {/* === HEADER === */}
           <header className="flex justify-between items-center mb-3 sm:mb-4 flex-shrink-0 gap-2 sm:gap-3">
             
@@ -558,12 +541,11 @@ function DashboardContent({ children }: { children: ReactNode }) {
           </header>
 
           {/* Main Content Area */}
-          <div className="flex-1 overflow-hidden rounded-2xl">
+          <div className="flex-1 overflow-hidden rounded-2xl w-full">
             {children}
           </div>
         </main>
       </div>
-    </AuthGuard>
   );
 }
 
@@ -571,11 +553,9 @@ function DashboardContent({ children }: { children: ReactNode }) {
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider>
-      <Suspense fallback={<DashboardSkeleton />}>
         <AuthGuard>
           <DashboardContent>{children}</DashboardContent>
         </AuthGuard>
-      </Suspense>
     </SidebarProvider>
   );
 }

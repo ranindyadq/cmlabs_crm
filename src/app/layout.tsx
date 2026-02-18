@@ -20,8 +20,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={poppins.className}>
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${poppins.className} bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white antialiased`}>
         <ThemeProvider>
           {/* 1. Loader di paling atas */}
           <NextTopLoader

@@ -1,0 +1,94 @@
+import { GET, POST } from '@/app/api/leads/route';
+import { prisma } from '@/lib/prisma';
+import { NextRequest } from 'next/server';
+
+// 1. KITA MOCK (Palsukan) FUNGSI AUTH
+// Ini agar kita tidak perlu bergantung pada next/headers cookies() di dalam Jest
+const mockSession = {
+  id: '',
+  role: 'ADMIN',
+  email: 'admin@test.com'
+};
+
+jest.mock('@/lib/auth-helper', () => ({
+  getSessionUser: jest.fn(async (req: Request) => {
+    const auth = req.headers.get('authorization');
+    if (auth === 'Bearer valid-token') {
+      return mockSession;
+    }
+    return null; // Return 401 jika token tidak ada / salah
+  }),
+}));
+
+// --- HELPER: Buat Mock Request ---
+function createMockRequest(method: string, body?: any, token?: string) {
+  const headers = new Headers();
+  if (token) headers.set('authorization', `Bearer ${token}`);
+  if (method === 'POST') headers.set('content-type', 'application/json');
+
+  return new NextRequest(`http://localhost:3000/api/leads`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+describe('Leads API', () => {
+  beforeAll(async () => {
+    // 1. Buat Role di DB Test
+    const role = await prisma.role.create({ data: { name: 'ADMIN' } });
+    
+    // 2. Buat User di DB Test (Dibutuhkan untuk relasi ownerId di tabel Lead)
+    const admin = await prisma.user.create({
+      data: {
+        fullName: 'Test Admin',
+        email: mockSession.email,
+        passwordHash: 'hashed123',
+        status: 'ACTIVE',
+        roleId: role.id
+      }
+    });
+    
+    // 3. Sinkronkan ID user dari DB ke dalam Mock Session
+    mockSession.id = admin.id;
+  });
+
+  it('Harus menolak akses jika tidak ada token (401)', async () => {
+    const req = createMockRequest('GET'); // Tanpa Token
+    const res = await GET(req);
+    
+    if (!res) throw new Error("Response is undefined");
+    expect(res.status).toBe(401);
+  });
+
+  it('Admin dapat membuat Lead baru dengan sukses (201)', async () => {
+    const payload = {
+      title: "Test Project A",
+      value: 15000000,
+      stage: "Lead In"
+    };
+
+    const req = createMockRequest('POST', payload, 'valid-token');
+    const res = await POST(req);
+    
+    if (!res) throw new Error("Response is undefined");
+    const data = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(data.message).toBe('Lead created successfully');
+    expect(data.data.title).toBe("Test Project A");
+    expect(data.data.ownerId).toBe(mockSession.id);
+  });
+
+  it('Dapat mengambil daftar Leads (200)', async () => {
+    const req = createMockRequest('GET', null, 'valid-token');
+    const res = await GET(req);
+    
+    if (!res) throw new Error("Response is undefined");
+    const result = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(result.data)).toBe(true);
+    expect(result.data.length).toBeGreaterThan(0);
+  });
+});

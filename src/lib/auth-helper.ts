@@ -2,6 +2,8 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '@/lib/prisma';
 import { JWT_SECRET } from '@/lib/constants';
 import { cookies } from 'next/headers';
+import { serialize } from 'cookie'; 
+import { SignJWT } from 'jose';
 
 // Definisi Tipe User agar autocompletion jalan di file lain
 export interface SessionUser {
@@ -55,6 +57,43 @@ export async function getSessionUser(req: Request): Promise<SessionUser | null> 
     // console.error("Auth Helper Error:", error); // Boleh di-uncomment untuk debugging
     return null;
   }
+}
+
+// ==========================================
+// 2. HELPER: MEMBUAT TOKEN & COOKIE (BARU)
+// ==========================================
+export async function signToken(payload: any, rememberMe: boolean = false) {
+  const tokenDuration = rememberMe ? '30d' : '8h';
+
+  const secretKey = new TextEncoder().encode(JWT_SECRET);
+  
+  // Menggunakan jose agar lebih aman & Edge-compatible
+  return await new SignJWT(payload)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime(tokenDuration)
+    .sign(secretKey);
+}
+
+export function setAuthCookie(token: string, rememberMe: boolean = false) {
+  const MAX_AGE_NORMAL = 60 * 60 * 8;      // 8 Jam
+  const MAX_AGE_REMEMBER = 60 * 60 * 24 * 30; // 30 Hari
+  
+  return serialize('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: rememberMe ? MAX_AGE_REMEMBER : MAX_AGE_NORMAL,
+  });
+}
+
+// ==========================================
+// 3. HELPER: MEMBERSIHKAN DATA SENSITIF (BARU)
+// ==========================================
+export function sanitizeUser(user: any) {
+  const { passwordHash, ...safeUser } = user; // Hapus password dari objek
+  return safeUser;
 }
 
 // PERMISSION HELPERS

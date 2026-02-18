@@ -135,7 +135,9 @@ export default function InvoiceTab({ leadId,
     setLoading(false);
   };
   
-  useEffect(() => { fetchInvoices(); }, [leadId]);
+  useEffect(() => { fetchInvoices(); 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leadId]);
 
   const fetchNextInvoiceNumber = async () => {
     try {

@@ -58,7 +58,7 @@ export default function TestimonialsSection() {
             >
               <StarRating />
               <p className="italic mb-6">
-                "{testimonial.quote}"
+                {testimonial.quote}
               </p>
               <div className="flex items-center">
                 

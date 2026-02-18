@@ -137,7 +137,7 @@ function BrandingBlock({
               <Illustration />
             </div>
             <p className="hidden md:block text-base font-light opacity-90 mt-1 bg-gradient-to-r from-[#FFFFFF] to-[#C7F500] bg-clip-text text-transparent">
-              Let's make business easier
+              {"Let's make business easier"}
             </p>
           </div>
         )}
