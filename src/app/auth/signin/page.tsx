@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import InputWithLabel from "@/components/ui/InputWithLabel";
@@ -10,13 +10,12 @@ import { useTheme } from "@/lib/context/ThemeContext";
 import apiClient from "@/lib/apiClient";
 import toast from "react-hot-toast";
 
-export default function SignInPage() {
+function SignInForm() {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const searchParams = useSearchParams(); 
 
-  // 🧠 state untuk input form
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -25,23 +24,19 @@ export default function SignInPage() {
   const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
-    // Jika URL mengandung ?expired=true
     if (searchParams.get("expired") === "true") {
       toast.error("Sesi Anda telah berakhir. Silakan login kembali.", {
         duration: 5000,
-        id: "session-expired", // Mencegah toast muncul dobel
+        id: "session-expired",
       });
       
-      // Opsional: Hapus token sisa dari localStorage jika ada yang tersangkut
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       sessionStorage.removeItem("token");
       sessionStorage.removeItem("user");
       
-      // Bersihkan URL agar toast tidak muncul terus jika user refresh halaman
       router.replace("/auth/signin");
     } else {
-      // Normal flow: Cek token aktif
       const token = localStorage.getItem("token") || sessionStorage.getItem("token");
       if (token) {
         router.replace("/dashboard");
@@ -49,7 +44,6 @@ export default function SignInPage() {
     }
   }, [router, searchParams]);
 
-  // 💥 fungsi login ke backend
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -62,36 +56,23 @@ export default function SignInPage() {
         const token = res.data.token;
         const user = res.data.user;
 
-        // 1. BERSIHKAN DULU SEMUA (Biar tidak bentrok)
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         sessionStorage.removeItem("token");
         sessionStorage.removeItem("user");
 
-        // 2. LOGIKA PENYIMPANAN SEDERHANA
         if (rememberMe) {
-            // Checkbox Dicentang -> Masuk LocalStorage (Awet)
-            console.log("💾 Saving to LocalStorage (Remember Me)");
             localStorage.setItem("token", token);
             localStorage.setItem("user", JSON.stringify(user));
         } else {
-            // Tidak Dicentang -> Masuk SessionStorage (Hilang saat tutup)
-            console.log("💾 Saving to SessionStorage (Temporary)");
             sessionStorage.setItem("token", token);
             sessionStorage.setItem("user", JSON.stringify(user));
         }
 
-        // 3. REDIRECT
         const callbackUrl = searchParams.get("callbackUrl");
-        if (callbackUrl) {
-           router.replace(callbackUrl);
-        } else {
-           router.replace("/dashboard"); 
-        }
-        
+        router.replace(callbackUrl || "/dashboard");
         return;
       }
-
     } catch (err: any) {
        console.error("Login Error:", err);
        const errorMessage = err.response?.data?.message || err.message || "Login failed";
@@ -219,5 +200,17 @@ export default function SignInPage() {
         </Link>
       </p>
     </AuthLayout>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-white dark:bg-gray-900">
+        <p className="text-[#5A4FB5] animate-pulse">Loading auth...</p>
+      </div>
+    }>
+      <SignInForm />
+    </Suspense>
   );
 }
