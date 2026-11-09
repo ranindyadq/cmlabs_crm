@@ -1,36 +1,23 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CRM CMLabs
 
-## Getting Started
+## Deskripsi 
+Proyek ini adalah sistem Customer Relationship Management (CRM) berbasis web.
 
-First, run the development server:
+Aplikasi ini dirancang khusus untuk membantu tim sales dan manajemen dalam mengelola data pelanggan (leads) secara terstruktur, melacak status penawaran penjualan melalui papan Kanban, mencatat riwayat interaksi dengan klien, serta memantau performa penjualan melalui dasbor analitik yang komprehensif.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Fitur Utama
+🔐 Authentication: Sistem login dan registrasi yang aman, mencakup otentikasi standar (Email/Password) dan integrasi Google OAuth.
+🎯 Leads Management: Manajemen prospek klien menggunakan tampilan Kanban Board interaktif. Mendukung pencatatan detail lead, pelacakan aktivitas (telepon, meeting, email), dan pembaruan status penjualan (Won/Lost).
+📊 Dashboard Analytics: Visualisasi data real-time yang menampilkan metrik utama seperti Total Pipeline Value, Active Deals, grafik pendapatan, dan distribusi sumber lead. Mendukung ekspor data laporan.
+👥 Team & Role Management: Pengelolaan anggota tim beserta hak aksesnya (Admin, Project Manager, Sales). Membatasi akses sales hanya pada leads yang ditugaskan kepada mereka.
+⚙️ Account & Settings: Pengelolaan profil pengguna, pembaruan kata sandi, dan penyesuaian preferensi 
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## eknologi yang Digunakan
+Framework: Next.js
+Font: Menggunakan optimasi next/font dengan font family Geist & Poppins.
+Deployment: Vercel
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Live Deployment
+Aplikasi ini telah di-deploy secara langsung menggunakan platform Vercel.
+Anda dapat mengakses versi live melalui tautan berikut:
+https://cmlabscrm7-ranindyas-projects.vercel.app/ 
